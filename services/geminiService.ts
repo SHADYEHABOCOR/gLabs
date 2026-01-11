@@ -38,11 +38,13 @@ export const translateMissingArabic = async (
   data: TransformedMenuItem[],
   onProgress?: (current: number, total: number) => void
 ): Promise<{ data: TransformedMenuItem[], count: number }> => {
-  const itemsToTranslate = data.filter(item =>
-    !item['Menu Item Name[ar-ae]'] ||
-    !item['Description[ar-ae]'] ||
-    (item['Modifier Group Name'] && !item['Modifier Group Name[ar-ae]'])
-  );
+  const itemsToTranslate = data.filter(item => {
+    const needsNameTranslation = item['Menu Item Name'] && !item['Menu Item Name[ar-ae]'];
+    const needsDescTranslation = item['Description'] && !item['Description[ar-ae]'];
+    const needsModGroupTranslation = item['Modifier Group Name'] && !item['Modifier Group Name[ar-ae]'];
+
+    return needsNameTranslation || needsDescTranslation || needsModGroupTranslation;
+  });
 
   if (itemsToTranslate.length === 0) return { data, count: 0 };
 
@@ -72,6 +74,11 @@ export const translateMissingArabic = async (
       You are an expert Arabic Menu Translator for the GCC/UAE market.
       Translate the following menu items, descriptions, and MODIFIERS into high-quality Arabic.
 
+      CRITICAL RULES:
+      - ONLY translate fields that have content. If a field is empty/null/undefined, return empty string for that field.
+      - DO NOT create or invent content. Only translate what exists.
+      - If description is empty, return empty string for desc_ar.
+
       MODIFIER RULES:
       1. SIZES: Small -> صغير, Medium -> متوسط, Large -> كبير, X-Large -> كبير جداً.
       2. VOLUMES: Convert 'ML' to 'مل' and 'L' to 'لتر'. Use Arabic numerals.
@@ -88,7 +95,7 @@ export const translateMissingArabic = async (
       - For Alcohol sauces, translate based on flavor (e.g. "Rich Sauce").
 
       Return a JSON array:
-      [{ "id": "original_id", "name_ar": "Arabic Name", "desc_ar": "Arabic Description", "mod_group_ar": "Arabic Mod Group", "mod_name_ar": "Arabic Mod Name" }]
+      [{ "id": "original_id", "name_ar": "Arabic Name or empty", "desc_ar": "Arabic Description or empty", "mod_group_ar": "Arabic Mod Group or empty", "mod_name_ar": "Arabic Mod Name or empty" }]
 
       Items:
       ${JSON.stringify(translationList)}
@@ -122,16 +129,17 @@ export const translateMissingArabic = async (
       results.forEach((res: any) => {
         const index = translatedData.findIndex(item => item['Menu Item Id'] === res.id);
         if (index !== -1) {
-          if (!translatedData[index]['Menu Item Name[ar-ae]']) {
+          // Only set translation if source field exists and translation is not empty
+          if (translatedData[index]['Menu Item Name'] && res.name_ar && !translatedData[index]['Menu Item Name[ar-ae]']) {
             translatedData[index]['Menu Item Name[ar-ae]'] = res.name_ar;
           }
-          if (!translatedData[index]['Description[ar-ae]']) {
+          if (translatedData[index]['Description'] && res.desc_ar && !translatedData[index]['Description[ar-ae]']) {
             translatedData[index]['Description[ar-ae]'] = res.desc_ar;
           }
-          if (res.mod_group_ar) {
+          if (translatedData[index]['Modifier Group Name'] && res.mod_group_ar) {
             translatedData[index]['Modifier Group Name[ar-ae]'] = res.mod_group_ar;
           }
-          if (res.mod_name_ar) {
+          if (translatedData[index]['Modifier Name'] && res.mod_name_ar) {
             translatedData[index]['Modifier Name[ar-ae]'] = res.mod_name_ar;
           }
           totalTranslated++;
