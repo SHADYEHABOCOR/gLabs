@@ -94,7 +94,12 @@ const MenuStudioApp: React.FC<MenuStudioAppProps> = ({ onBack }) => {
       </header>
 
       <main className="flex-1 overflow-auto">
-        {currentView === 'transformer' ? <TransformerPage /> : <ScraperPage />}
+        <div style={{ display: currentView === 'transformer' ? 'block' : 'none' }}>
+          <TransformerPage />
+        </div>
+        <div style={{ display: currentView === 'scraper' ? 'block' : 'none' }}>
+          <ScraperPage />
+        </div>
       </main>
 
       <footer className="bg-white border-t py-4">
