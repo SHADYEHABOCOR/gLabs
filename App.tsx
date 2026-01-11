@@ -20,12 +20,12 @@ const App: React.FC = () => {
 
   return (
     <>
-      {currentRoute === 'dashboard' && (
+      <div style={{ display: currentRoute === 'dashboard' ? 'block' : 'none' }}>
         <Dashboard onSelectApp={handleSelectApp} />
-      )}
-      {currentRoute === 'menu-studio' && (
+      </div>
+      <div style={{ display: currentRoute === 'menu-studio' ? 'block' : 'none' }}>
         <MenuStudioApp onBack={handleBackToDashboard} />
-      )}
+      </div>
     </>
   );
 };
