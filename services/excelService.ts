@@ -261,14 +261,17 @@ export const transformMenuData = (
   });
 
   const finalOrder = [
-    'Menu Item Id', 'Menu Item Name', 'Menu Item Name[ar-ae]',
+    'Menu Item Id',
+    'Menu Item Name', 'Menu Item Name[ar-ae]',
+    'Description', 'Description[ar-ae]',
+    'Brand Id', 'Brand Name', 'Brand Name[ar-ae]',
     'Modifier Group Name', 'Modifier Group Name[ar-ae]',
     'Modifier Name', 'Modifier Name[ar-ae]',
     'Sub-Modifier Group Name', 'Sub-Modifier Group Name[ar-ae]',
     'Sub-Modifier Name', 'Sub-Modifier Name[ar-ae]',
-    'Brand Id', 'Brand Name', 'Brand Name[ar-ae]', 'Preparation Time',
-    'Description', 'Description[ar-ae]',
-    'External Id', 'Barcode', 'Routing Label Id', 'Routing Label', 'Routing Label[ar-ae]',
+    'External Id', 'Barcode',
+    'Preparation Time',
+    'Routing Label Id', 'Routing Label', 'Routing Label[ar-ae]',
     'Ingredient', 'Packaging'
   ];
 
