@@ -266,9 +266,9 @@ export const transformMenuData = (
     'Modifier Name', 'Modifier Name[ar-ae]',
     'Sub-Modifier Group Name', 'Sub-Modifier Group Name[ar-ae]',
     'Sub-Modifier Name', 'Sub-Modifier Name[ar-ae]',
-    'Brand Id', 'Brand Name', 'Preparation Time',
+    'Brand Id', 'Brand Name', 'Brand Name[ar-ae]', 'Preparation Time',
     'Description', 'Description[ar-ae]',
-    'External Id', 'Barcode', 'Routing Label Id', 'Routing Label',
+    'External Id', 'Barcode', 'Routing Label Id', 'Routing Label', 'Routing Label[ar-ae]',
     'Ingredient', 'Packaging'
   ];
 
@@ -276,7 +276,9 @@ export const transformMenuData = (
   sortedCurrencies.forEach(curr => finalOrder.push(`Price[${curr}]`));
 
   finalOrder.push(
-    'Classification', 'Allergen', 'Tag',
+    'Classification', 'Classification[ar-ae]',
+    'Allergen', 'Allergen[ar-ae]',
+    'Tag', 'Tag[ar-ae]',
     'Calories(kcal)', 'Caffeine Content(g)', 'Sodium Content(g)', 'Salt Content(g)',
     'Image URL'
   );
