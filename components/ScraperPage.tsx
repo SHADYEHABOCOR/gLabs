@@ -20,19 +20,20 @@ import * as XLSX from 'xlsx';
 import { scrapeMenuPreview, ScrapedItem, upscaleImageUrl } from '../services/scraperService';
 import { bulkSaveToDB, getDBKey, getLocalDB, convertToJpg } from '../services/imageService';
 
-// Helper function to convert Google Drive link to direct download link
+// Helper function to convert Google Drive link to thumbnail/preview URL
 const convertDriveLinkToDirectUrl = (url: string): string => {
   if (!url) return url;
 
   // Handle various Google Drive URL formats
   const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (fileIdMatch) {
-    return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+    // Use thumbnail endpoint which works better for images in browser
+    return `https://drive.google.com/thumbnail?id=${fileIdMatch[1]}&sz=w1000`;
   }
 
   const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idMatch) {
-    return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
+    return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1000`;
   }
 
   return url;
