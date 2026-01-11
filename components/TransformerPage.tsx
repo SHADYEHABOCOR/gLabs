@@ -273,7 +273,10 @@ const TransformerPage: React.FC = () => {
         setProcessingProgress({ current: 0, total: 0 });
         const res = await translateArabicToEnglish(data, (current, total) => {
           setProcessingStatus(`Translating Ar to En...`);
-          setProcessingProgress({ current, total });
+          setProcessingProgress(prev => ({
+            current: Math.max(prev.current, current),
+            total
+          }));
         });
         data = res.data;
         newStats.autoTranslatedEnCount = res.count;
@@ -285,7 +288,10 @@ const TransformerPage: React.FC = () => {
         setProcessingProgress({ current: 0, total: 0 });
         const res = await translateMissingArabic(data, (current, total) => {
           setProcessingStatus(`Translating En to Ar...`);
-          setProcessingProgress({ current, total });
+          setProcessingProgress(prev => ({
+            current: Math.max(prev.current, current),
+            total
+          }));
         });
         data = res.data;
         newStats.autoTranslatedCount = res.count;
@@ -297,7 +303,10 @@ const TransformerPage: React.FC = () => {
         setProcessingProgress({ current: 0, total: 0 });
         const res = await estimateCaloriesForItems(data, (current, total) => {
           setProcessingStatus(`Calculating Calories...`);
-          setProcessingProgress({ current, total });
+          setProcessingProgress(prev => ({
+            current: Math.max(prev.current, current),
+            total
+          }));
         });
         data = res.data;
         newStats.caloriesEstimatedCount = res.count;
@@ -459,28 +468,33 @@ const TransformerPage: React.FC = () => {
             </div>
           </section>
 
-          <button onClick={runTransformation} disabled={!rawData || isProcessing} className={`w-full py-4 rounded-xl font-bold flex flex-col items-center justify-center space-y-1 transition-all shadow-lg relative overflow-hidden ${!rawData || isProcessing ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-            {isProcessing && processingProgress.total > 0 && (
-              <div className="absolute inset-0 bg-blue-400 transition-all duration-300 ease-out" style={{ width: `${(processingProgress.current / processingProgress.total) * 100}%` }} />
-            )}
-            <div className="relative z-10 flex flex-col items-center space-y-1">
-              {isProcessing ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-[10px]">{processingStatus}</span>
-                  {processingProgress.total > 0 && (
-                    <span className="text-[9px] font-normal">
-                      {processingProgress.current}/{processingProgress.total} ({Math.round((processingProgress.current / processingProgress.total) * 100)}%)
+          <button onClick={runTransformation} disabled={!rawData || isProcessing} className={`w-full rounded-xl font-bold transition-all shadow-lg relative overflow-hidden ${!rawData || isProcessing ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+            {isProcessing ? (
+              <div className="py-4 flex flex-col items-center space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">{processingStatus}</span>
+                </div>
+                {processingProgress.total > 0 && (
+                  <>
+                    <div className="w-3/4 bg-slate-300 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full transition-all duration-500 ease-out rounded-full"
+                        style={{ width: `${(processingProgress.current / processingProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs opacity-75">
+                      {processingProgress.current}/{processingProgress.total} items ({Math.round((processingProgress.current / processingProgress.total) * 100)}%)
                     </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Play className="w-5 h-5 fill-current" />
-                  <span>Transform Menu</span>
-                </>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="py-4 flex items-center justify-center space-x-2">
+                <Play className="w-5 h-5 fill-current" />
+                <span>Transform Menu</span>
+              </div>
+            )}
           </button>
           
           <button onClick={() => setIsAssetManagerOpen(true)} className="w-full py-3 bg-white border border-slate-200 rounded-xl text-slate-600 text-sm font-bold flex items-center justify-center hover:bg-slate-50 transition-colors">
