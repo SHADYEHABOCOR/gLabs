@@ -17,8 +17,17 @@ interface MenuStudioAppProps {
 }
 
 const MenuStudioApp: React.FC<MenuStudioAppProps> = ({ onBack }) => {
-  const [currentView, setCurrentView] = useState<View>('transformer');
+  // Load saved view from localStorage, default to 'transformer'
+  const [currentView, setCurrentView] = useState<View>(() => {
+    const saved = localStorage.getItem('menuStudioView');
+    return (saved as View) || 'transformer';
+  });
   const [dbAssetCount, setDbAssetCount] = useState(0);
+
+  // Save view to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('menuStudioView', currentView);
+  }, [currentView]);
 
   useEffect(() => {
     const updateCount = async () => {
