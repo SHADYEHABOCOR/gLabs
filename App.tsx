@@ -29,10 +29,10 @@ const App: React.FC = () => {
 
   return (
     <>
-      <div style={{ display: currentRoute === 'dashboard' ? 'block' : 'none' }}>
+      <div className={currentRoute === 'dashboard' ? '' : 'hidden'}>
         <Dashboard onSelectApp={handleSelectApp} />
       </div>
-      <div style={{ display: currentRoute === 'menu-studio' ? 'block' : 'none' }}>
+      <div className={currentRoute === 'menu-studio' ? '' : 'hidden'}>
         <MenuStudioApp onBack={handleBackToDashboard} />
       </div>
     </>

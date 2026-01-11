@@ -103,10 +103,10 @@ const MenuStudioApp: React.FC<MenuStudioAppProps> = ({ onBack }) => {
       </header>
 
       <main className="flex-1 overflow-auto">
-        <div style={{ display: currentView === 'transformer' ? 'block' : 'none' }}>
+        <div className={currentView === 'transformer' ? '' : 'hidden'}>
           <TransformerPage />
         </div>
-        <div style={{ display: currentView === 'scraper' ? 'block' : 'none' }}>
+        <div className={currentView === 'scraper' ? '' : 'hidden'}>
           <ScraperPage />
         </div>
       </main>
