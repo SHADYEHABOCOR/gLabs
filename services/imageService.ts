@@ -196,16 +196,20 @@ export const processImageSync = async (
         await sleep(1500); 
       }
 
-      const prompt = `EXQUISITE 8K HIGH-RESOLUTION FOOD PHOTOGRAPHY of "${itemName}". 
-        ${item['Description'] ? `FOLLOW DESCRIPTION PRECISELY: ${item['Description']}.` : ''} 
-        
+      const prompt = `EXQUISITE 8K HIGH-RESOLUTION FOOD PHOTOGRAPHY of "${itemName}".
+        ${item['Description'] ? `FOLLOW DESCRIPTION PRECISELY: ${item['Description']}.` : ''}
+
+        CRITICAL VISUAL REQUIREMENTS:
+        1. ABSOLUTELY NO TEXT, NO WORDS, NO LETTERS, NO WRITING, NO LABELS, NO LOGOS anywhere in the image.
+        2. ABSOLUTELY NO NUMBERS, NO PRICES, NO MENUS visible in the image.
+        3. ONLY the food item itself - no text overlays, no branding, no signage.
+
         VISUAL QUALITY STANDARDS:
         1. Professional studio lighting, ultra-sharp focus, extremely detailed food textures.
         2. Macro photography style, vibrant and appetizing colors.
-        3. STRICT COMPLIANCE: No text, logos, or writing.
-        4. CULTURAL COMPLIANCE: No pork, no alcohol.
-        5. Presentation: Minimalist, clean neutral background.
-        6. NO unnecessary props. The dish is the hero.`;
+        3. CULTURAL COMPLIANCE: No pork, no alcohol.
+        4. Presentation: Minimalist, clean neutral background.
+        5. NO unnecessary props. The dish is the hero.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
