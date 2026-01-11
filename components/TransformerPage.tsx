@@ -269,21 +269,27 @@ const TransformerPage: React.FC = () => {
 
       if (options.autoTranslateArToEn) {
         setProcessingStatus('Translating Ar to En...');
-        const res = await translateArabicToEnglish(data);
+        const res = await translateArabicToEnglish(data, (current, total) => {
+          setProcessingStatus(`Translating Ar to En... (${current}/${total})`);
+        });
         data = res.data;
         newStats.autoTranslatedEnCount = res.count;
       }
 
       if (options.autoTranslate) {
         setProcessingStatus('Translating En to Ar...');
-        const res = await translateMissingArabic(data);
+        const res = await translateMissingArabic(data, (current, total) => {
+          setProcessingStatus(`Translating En to Ar... (${current}/${total})`);
+        });
         data = res.data;
         newStats.autoTranslatedCount = res.count;
       }
 
       if (options.estimateCalories) {
         setProcessingStatus('Calculating Calories...');
-        const res = await estimateCaloriesForItems(data);
+        const res = await estimateCaloriesForItems(data, (current, total) => {
+          setProcessingStatus(`Calculating Calories... (${current}/${total})`);
+        });
         data = res.data;
         newStats.caloriesEstimatedCount = res.count;
       }

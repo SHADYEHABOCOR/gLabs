@@ -34,34 +34,44 @@ export const getAIInsights = async (stats: TransformationStats, sampleData: any[
   }
 };
 
-export const translateMissingArabic = async (data: TransformedMenuItem[]): Promise<{ data: TransformedMenuItem[], count: number }> => {
-  const itemsToTranslate = data.filter(item => 
-    !item['Menu Item Name[ar-ae]'] || 
-    !item['Description[ar-ae]'] || 
+export const translateMissingArabic = async (
+  data: TransformedMenuItem[],
+  onProgress?: (current: number, total: number) => void
+): Promise<{ data: TransformedMenuItem[], count: number }> => {
+  const itemsToTranslate = data.filter(item =>
+    !item['Menu Item Name[ar-ae]'] ||
+    !item['Description[ar-ae]'] ||
     (item['Modifier Group Name'] && !item['Modifier Group Name[ar-ae]'])
   );
-  
+
   if (itemsToTranslate.length === 0) return { data, count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const batchSize = 10;
+  const batchSize = 25; // Increased from 10 to 25
+  const concurrency = 3; // Process 3 batches in parallel
   const translatedData = [...data];
   let totalTranslated = 0;
 
+  // Create all batches upfront
+  const batches: typeof itemsToTranslate[] = [];
   for (let i = 0; i < itemsToTranslate.length; i += batchSize) {
-    const batch = itemsToTranslate.slice(i, i + batchSize);
+    batches.push(itemsToTranslate.slice(i, i + batchSize));
+  }
+
+  // Process batches with controlled concurrency
+  const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
     const translationList = batch.map(item => ({
       id: item['Menu Item Id'],
       name: item['Menu Item Name'],
       description: item['Description'],
       modifierGroup: item['Modifier Group Name'],
-      modifierName: item['Modifier Name'] // Included for comprehensive context
+      modifierName: item['Modifier Name']
     }));
 
     const prompt = `
       You are an expert Arabic Menu Translator for the GCC/UAE market.
       Translate the following menu items, descriptions, and MODIFIERS into high-quality Arabic.
-      
+
       MODIFIER RULES:
       1. SIZES: Small -> صغير, Medium -> متوسط, Large -> كبير, X-Large -> كبير جداً.
       2. VOLUMES: Convert 'ML' to 'مل' and 'L' to 'لتر'. Use Arabic numerals.
@@ -79,7 +89,7 @@ export const translateMissingArabic = async (data: TransformedMenuItem[]): Promi
 
       Return a JSON array:
       [{ "id": "original_id", "name_ar": "Arabic Name", "desc_ar": "Arabic Description", "mod_group_ar": "Arabic Mod Group", "mod_name_ar": "Arabic Mod Name" }]
-      
+
       Items:
       ${JSON.stringify(translationList)}
     `;
@@ -108,7 +118,7 @@ export const translateMissingArabic = async (data: TransformedMenuItem[]): Promi
       });
 
       const results = JSON.parse(response.text || '[]');
-      
+
       results.forEach((res: any) => {
         const index = translatedData.findIndex(item => item['Menu Item Id'] === res.id);
         if (index !== -1) {
@@ -127,15 +137,28 @@ export const translateMissingArabic = async (data: TransformedMenuItem[]): Promi
           totalTranslated++;
         }
       });
+
+      if (onProgress) {
+        onProgress((batchIndex + 1) * batchSize, itemsToTranslate.length);
+      }
     } catch (error) {
-      console.error("Batch translation failed:", error);
+      console.error(`Batch ${batchIndex + 1} translation failed:`, error);
     }
+  };
+
+  // Process batches with concurrency limit
+  for (let i = 0; i < batches.length; i += concurrency) {
+    const batchGroup = batches.slice(i, i + concurrency);
+    await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
   }
 
   return { data: translatedData, count: totalTranslated };
 };
 
-export const translateArabicToEnglish = async (data: TransformedMenuItem[]): Promise<{ data: TransformedMenuItem[], count: number }> => {
+export const translateArabicToEnglish = async (
+  data: TransformedMenuItem[],
+  onProgress?: (current: number, total: number) => void
+): Promise<{ data: TransformedMenuItem[], count: number }> => {
   const arabicRegex = /[\u0600-\u06FF]/;
   const itemsToTranslate = data.filter(item => {
     const name = (item['Menu Item Name'] || '').toString();
@@ -147,12 +170,17 @@ export const translateArabicToEnglish = async (data: TransformedMenuItem[]): Pro
   if (itemsToTranslate.length === 0) return { data, count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const batchSize = 10;
+  const batchSize = 25;
+  const concurrency = 3;
   const translatedData = [...data];
   let totalTranslated = 0;
 
+  const batches: typeof itemsToTranslate[] = [];
   for (let i = 0; i < itemsToTranslate.length; i += batchSize) {
-    const batch = itemsToTranslate.slice(i, i + batchSize);
+    batches.push(itemsToTranslate.slice(i, i + batchSize));
+  }
+
+  const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
     const translationList = batch.map(item => ({
       id: item['Menu Item Id'],
       name: item['Menu Item Name'],
@@ -218,26 +246,43 @@ export const translateArabicToEnglish = async (data: TransformedMenuItem[]): Pro
           totalTranslated++;
         }
       });
+
+      if (onProgress) {
+        onProgress((batchIndex + 1) * batchSize, itemsToTranslate.length);
+      }
     } catch (error) {
-      console.error("Batch Ar to En translation failed:", error);
+      console.error(`Batch ${batchIndex + 1} Ar to En translation failed:`, error);
     }
+  };
+
+  for (let i = 0; i < batches.length; i += concurrency) {
+    const batchGroup = batches.slice(i, i + concurrency);
+    await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
   }
 
   return { data: translatedData, count: totalTranslated };
 };
 
-export const estimateCaloriesForItems = async (data: TransformedMenuItem[]): Promise<{ data: TransformedMenuItem[], count: number }> => {
+export const estimateCaloriesForItems = async (
+  data: TransformedMenuItem[],
+  onProgress?: (current: number, total: number) => void
+): Promise<{ data: TransformedMenuItem[], count: number }> => {
   const itemsToEstimate = data.filter(item => !item['Calories(kcal)']);
-  
+
   if (itemsToEstimate.length === 0) return { data, count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const batchSize = 10;
+  const batchSize = 30; // Increased from 10 to 30 (calorie estimation is simpler)
+  const concurrency = 3;
   const processedData = [...data];
   let totalEstimated = 0;
 
+  const batches: typeof itemsToEstimate[] = [];
   for (let i = 0; i < itemsToEstimate.length; i += batchSize) {
-    const batch = itemsToEstimate.slice(i, i + batchSize);
+    batches.push(itemsToEstimate.slice(i, i + batchSize));
+  }
+
+  const processBatch = async (batch: typeof itemsToEstimate, batchIndex: number) => {
     const estimateList = batch.map(item => ({
       id: item['Menu Item Id'],
       name: item['Menu Item Name'],
@@ -283,9 +328,18 @@ export const estimateCaloriesForItems = async (data: TransformedMenuItem[]): Pro
           totalEstimated++;
         }
       });
+
+      if (onProgress) {
+        onProgress((batchIndex + 1) * batchSize, itemsToEstimate.length);
+      }
     } catch (error) {
-      console.error("Batch calorie estimation failed:", error);
+      console.error(`Batch ${batchIndex + 1} calorie estimation failed:`, error);
     }
+  };
+
+  for (let i = 0; i < batches.length; i += concurrency) {
+    const batchGroup = batches.slice(i, i + concurrency);
+    await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
   }
 
   return { data: processedData, count: totalEstimated };
