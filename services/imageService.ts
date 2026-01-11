@@ -196,20 +196,23 @@ export const processImageSync = async (
         await sleep(1500); 
       }
 
-      const prompt = `EXQUISITE 8K HIGH-RESOLUTION FOOD PHOTOGRAPHY of "${itemName}".
-        ${item['Description'] ? `FOLLOW DESCRIPTION PRECISELY: ${item['Description']}.` : ''}
+      const prompt = `PROFESSIONAL FOOD PHOTOGRAPHY - ${itemName}
+        ${item['Description'] ? `Style: ${item['Description']}` : ''}
 
-        CRITICAL VISUAL REQUIREMENTS:
-        1. ABSOLUTELY NO TEXT, NO WORDS, NO LETTERS, NO WRITING, NO LABELS, NO LOGOS anywhere in the image.
-        2. ABSOLUTELY NO NUMBERS, NO PRICES, NO MENUS visible in the image.
-        3. ONLY the food item itself - no text overlays, no branding, no signage.
+        CRITICAL REQUIREMENTS - MUST FOLLOW:
+        1. ABSOLUTELY NO TEXT, WORDS, LETTERS, WRITING, LABELS, LOGOS, OR NUMBERS anywhere in image
+        2. NO raw ingredients as props (no whole vegetables, fruits, or uncooked items as decoration)
+        3. NO literal interpretation of dish name (carrot cake = baked cake, NOT cake with whole carrots on top)
+        4. ONLY show the FINISHED PREPARED DISH as served to customers
+        5. Clean neutral background - no menus, no signs, no branding
 
-        VISUAL QUALITY STANDARDS:
-        1. Professional studio lighting, ultra-sharp focus, extremely detailed food textures.
-        2. Macro photography style, vibrant and appetizing colors.
-        3. CULTURAL COMPLIANCE: No pork, no alcohol.
-        4. Presentation: Minimalist, clean neutral background.
-        5. NO unnecessary props. The dish is the hero.`;
+        PROFESSIONAL STANDARDS:
+        - Restaurant-quality plated presentation
+        - Professional studio lighting, sharp focus
+        - Appetizing colors, macro detail on textures
+        - Minimalist styling - the dish itself is the focus
+        - CULTURAL COMPLIANCE: No pork, no alcohol
+        - Simple elegant plating on neutral dinnerware`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
