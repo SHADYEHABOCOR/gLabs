@@ -31,6 +31,14 @@ const HEADER_MAPPINGS: Record<string, string> = {
   'allergens': 'Allergen',
   'external id': 'External Id',
   'barcode': 'Barcode',
+  'active': 'Active',
+  'status': 'Active',
+  'enabled': 'Active',
+  'category': 'Tag',
+  'images': 'Image URL',
+  'image': 'Image URL',
+  'image url': 'Image URL',
+  'imageurl': 'Image URL',
   'modifier group': 'Modifier Group Name',
   'modifier group name': 'Modifier Group Name',
   'mod group': 'Modifier Group Name',
@@ -42,11 +50,49 @@ const HEADER_MAPPINGS: Record<string, string> = {
 
 /**
  * Normalizes an object's keys based on the HEADER_MAPPINGS
+ * Also handles language-specific formats like "NAME (EN)", "Description (AR)", etc.
  */
 const normalizeRow = (row: any): RawMenuItem => {
   const normalized: any = {};
   Object.keys(row).forEach(key => {
     const cleanKey = key.toLowerCase().trim();
+
+    // Check for language-specific formats: "NAME (EN)", "Description (AR)", etc.
+    const langMatch = cleanKey.match(/^(.+?)\s*\((en|ar|ar-ae)\)$/i);
+    if (langMatch) {
+      const baseName = langMatch[1].trim();
+      const lang = langMatch[2].toLowerCase();
+
+      // Map the base name to standard field
+      const mappedBase = HEADER_MAPPINGS[baseName] || baseName;
+
+      // Add language suffix for non-English
+      if (lang === 'ar' || lang === 'ar-ae') {
+        normalized[`${mappedBase}[ar-ae]`] = row[key];
+      } else {
+        // English version goes to the standard field name
+        normalized[mappedBase] = row[key];
+      }
+      return;
+    }
+
+    // Check for bracket format: "NAME [EN]", "Description [AR]", etc.
+    const bracketMatch = cleanKey.match(/^(.+?)\s*\[(en|ar|ar-ae)\]$/i);
+    if (bracketMatch) {
+      const baseName = bracketMatch[1].trim();
+      const lang = bracketMatch[2].toLowerCase();
+
+      const mappedBase = HEADER_MAPPINGS[baseName] || baseName;
+
+      if (lang === 'ar' || lang === 'ar-ae') {
+        normalized[`${mappedBase}[ar-ae]`] = row[key];
+      } else {
+        normalized[mappedBase] = row[key];
+      }
+      return;
+    }
+
+    // Standard mapping
     const mappedKey = HEADER_MAPPINGS[cleanKey] || key;
     normalized[mappedKey] = row[key];
   });
@@ -71,11 +117,30 @@ const parsePrice = (priceStr: string | null | undefined) => {
   const cleanPrice = priceStr.toString().trim();
   const currencyMatch = cleanPrice.match(/([A-Z]{3})/i);
   const valueMatch = cleanPrice.match(/([\d,.]+)/);
-  
+
   const currency = currencyMatch ? currencyMatch[1].toUpperCase() : 'AED';
   const value = valueMatch ? parseFloat(valueMatch[1].replace(',', '')) : null;
-  
+
   return { currency, value };
+};
+
+/**
+ * Converts Google Drive links to direct thumbnail URLs
+ */
+const convertDriveLinkToDirectUrl = (url: string): string => {
+  if (!url || typeof url !== 'string') return url;
+
+  // Check if it's a Google Drive link
+  if (url.includes('drive.google.com')) {
+    // Extract file ID from various Drive URL formats
+    const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch) {
+      // Convert to thumbnail API endpoint (works without auth for public files)
+      return `https://drive.google.com/thumbnail?id=${fileIdMatch[1]}&sz=w1000`;
+    }
+  }
+
+  return url;
 };
 
 export const transformMenuData = (
@@ -109,9 +174,8 @@ export const transformMenuData = (
   for (let i = 0; i < rawData.length; i++) {
     const rawRow = rawData[i];
     const row = normalizeRow(rawRow);
-    
+
     // Check if this is a translation row (standard in some Grubtech exports)
-    const type = row['Type'] || '';
     const itemName = row['Menu Item Name'] || row['Modifier Name'] || row['Modifier Group Name'] || '';
     const isTranslationRow = (!row['Menu Item Id'] || row['Menu Item Id'] === '') && itemName.toString().startsWith('[ar-ae]:');
 
@@ -159,6 +223,14 @@ export const transformMenuData = (
         if (currency && value !== null) {
           newItem[`Price[${currency}]`] = value;
           currencies.add(currency);
+        }
+      }
+
+      // Automatically convert Google Drive links in Image URL field
+      if (newItem['Image URL']) {
+        const imageUrl = newItem['Image URL'].toString();
+        if (imageUrl.includes('drive.google.com')) {
+          newItem['Image URL'] = convertDriveLinkToDirectUrl(imageUrl);
         }
       }
 
