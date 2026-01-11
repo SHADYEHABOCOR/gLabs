@@ -74,17 +74,23 @@ export const getLocalDB = async (): Promise<Record<string, string>> => {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readonly');
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.getAll();
-    const keysRequest = store.getAllKeys();
-    
-    transaction.oncomplete = () => {
-      const result: Record<string, string> = {};
-      const keys = keysRequest.result as string[];
-      const values = request.result as string[];
-      keys.forEach((key, i) => { result[key] = values[i]; });
-      resolve(result);
+
+    // Use cursor instead of getAll to avoid browser limits
+    const result: Record<string, string> = {};
+    const request = store.openCursor();
+
+    request.onsuccess = (event: any) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        result[cursor.key as string] = cursor.value as string;
+        cursor.continue();
+      } else {
+        // No more entries
+        resolve(result);
+      }
     };
-    transaction.onerror = () => reject(transaction.error);
+
+    request.onerror = () => reject(request.error);
   });
 };
 
@@ -100,29 +106,36 @@ export const saveToDB = async (key: string, base64: string) => {
 };
 
 export const bulkSaveToDB = async (
-  newItems: Record<string, string>, 
+  newItems: Record<string, string>,
   onProgress?: (current: number, total: number) => void
 ) => {
-  const db = await getDB();
   const keys = Object.keys(newItems);
   const total = keys.length;
-  
-  return new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    
-    let completed = 0;
-    keys.forEach((key) => {
-      const request = store.put(newItems[key], key);
-      request.onsuccess = () => {
-        completed++;
-        if (onProgress) onProgress(completed, total);
-      };
-    });
+  const CHUNK_SIZE = 500; // Process in chunks to avoid transaction limits
 
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
+  let completed = 0;
+
+  // Process in chunks
+  for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
+    const chunkKeys = keys.slice(i, i + CHUNK_SIZE);
+    const db = await getDB();
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+
+      chunkKeys.forEach((key) => {
+        const request = store.put(newItems[key], key);
+        request.onsuccess = () => {
+          completed++;
+          if (onProgress) onProgress(completed, total);
+        };
+      });
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
 };
 
 export const removeFromDB = async (key: string) => {
