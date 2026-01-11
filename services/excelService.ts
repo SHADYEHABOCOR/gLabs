@@ -42,10 +42,18 @@ const HEADER_MAPPINGS: Record<string, string> = {
   'modifier group': 'Modifier Group Name',
   'modifier group name': 'Modifier Group Name',
   'mod group': 'Modifier Group Name',
+  'modifiergroup': 'Modifier Group Name',
+  'addon group': 'Modifier Group Name',
   'modifier name': 'Modifier Name',
   'modifier_name': 'Modifier Name',
+  'modifiername': 'Modifier Name',
+  'modifier': 'Modifier Name',
+  'addon': 'Modifier Name',
+  'addon name': 'Modifier Name',
   'sub modifier group': 'Sub-Modifier Group Name',
-  'sub modifier name': 'Sub-Modifier Name'
+  'sub-modifier group': 'Sub-Modifier Group Name',
+  'sub modifier name': 'Sub-Modifier Name',
+  'sub-modifier name': 'Sub-Modifier Name'
 };
 
 /**
@@ -213,7 +221,10 @@ export const transformMenuData = (
       delete (newItem as any).Price;
 
       if (options.applyTitleCase) {
-        ['Menu Item Name', 'Description', 'Brand Name', 'Tag', 'Classification', 'Routing Label', 'Modifier Group Name', 'Modifier Name'].forEach(key => {
+        [
+          'Menu Item Name', 'Description', 'Brand Name', 'Tag', 'Classification', 'Routing Label',
+          'Modifier Group Name', 'Modifier Name', 'Sub-Modifier Group Name', 'Sub-Modifier Name'
+        ].forEach(key => {
           if (newItem[key]) newItem[key] = applyTitleCase(newItem[key].toString());
         });
       }
@@ -243,6 +254,8 @@ export const transformMenuData = (
     'Menu Item Id', 'Menu Item Name', 'Menu Item Name[ar-ae]',
     'Modifier Group Name', 'Modifier Group Name[ar-ae]',
     'Modifier Name', 'Modifier Name[ar-ae]',
+    'Sub-Modifier Group Name', 'Sub-Modifier Group Name[ar-ae]',
+    'Sub-Modifier Name', 'Sub-Modifier Name[ar-ae]',
     'Brand Id', 'Brand Name', 'Preparation Time',
     'Description', 'Description[ar-ae]',
     'External Id', 'Barcode', 'Routing Label Id', 'Routing Label',

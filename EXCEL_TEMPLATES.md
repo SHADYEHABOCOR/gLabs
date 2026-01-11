@@ -38,12 +38,29 @@ The tables below show common variations, but the system is **not limited** to th
 
 ### Modifier Fields
 
+Modifiers support **all the same features** as menu items:
+- Language detection: `MODIFIER GROUP (EN)`, `MODIFIER NAME (AR)`
+- Title case formatting
+- Arabic translations in output
+
 | Your Header | Maps To | Description |
 |-------------|---------|-------------|
-| `modifier group`, `modifier group name`, `mod group` | **Modifier Group Name** | Modifier group name |
-| `modifier name`, `modifier_name` | **Modifier Name** | Individual modifier name |
-| `sub modifier group`, `sub-modifier group name` | **Sub-Modifier Group Name** | Sub-modifier group |
-| `sub modifier name` | **Sub-Modifier Name** | Sub-modifier name |
+| `modifier group`, `modifier group name`, `mod group`, `addon group` | **Modifier Group Name** | Modifier group name |
+| `modifier name`, `modifier`, `addon`, `addon name` | **Modifier Name** | Individual modifier name |
+| `sub modifier group`, `sub-modifier group` | **Sub-Modifier Group Name** | Sub-modifier group |
+| `sub modifier name`, `sub-modifier name` | **Sub-Modifier Name** | Sub-modifier name |
+
+**Example with languages:**
+```csv
+Item ID | Name (EN) | MODIFIER GROUP (EN) | MODIFIER GROUP (AR) | MODIFIER NAME (EN) | MODIFIER NAME (AR)
+123 | Burger | Size | الحجم | Small | صغير
+```
+
+**Output:**
+```csv
+Menu Item Id | Menu Item Name | Modifier Group Name | Modifier Group Name[ar-ae] | Modifier Name | Modifier Name[ar-ae]
+123 | Burger | Size | الحجم | Small | صغير
+```
 
 ### Arabic Translation Format
 
@@ -132,6 +149,23 @@ SKU125,Pasta Carbonara,باستا كاربونارا,Creamy pasta with bacon,ب�
 ```
 
 **Note:** Drive links are automatically converted to thumbnail URLs in the output!
+
+#### Template 3: With Modifiers and Language Support
+
+```csv
+ID,Name (EN),Name (AR),Modifier Group (EN),Modifier Group (AR),Modifier Name (EN),Modifier Name (AR),Price
+101,Coffee,قهوة,Size,الحجم,Small,صغير,AED 12.00
+101,Coffee,قهوة,Size,الحجم,Medium,متوسط,AED 15.00
+101,Coffee,قهوة,Size,الحجم,Large,كبير,AED 18.00
+102,Burger,برجر,Add-ons,إضافات,Cheese,جبنة,AED 3.00
+102,Burger,برجر,Add-ons,إضافات,Bacon,لحم مقدد,AED 5.00
+```
+
+**Output includes:**
+- `Menu Item Name` / `Menu Item Name[ar-ae]`
+- `Modifier Group Name` / `Modifier Group Name[ar-ae]`
+- `Modifier Name` / `Modifier Name[ar-ae]`
+- All text properly formatted with Title Case
 
 **Both templates produce identical standardized output!** Use whichever format matches your existing data structure.
 
@@ -250,8 +284,11 @@ The transformer intelligently handles various real-world formats:
 | `NAME (EN)`, `NAME (AR)` | Name with languages | `Menu Item Name`, `Menu Item Name[ar-ae]` |
 | `Description [EN]`, `Description [AR]` | Description with languages | `Description`, `Description[ar-ae]` |
 | `CATEGORY (EN)`, `CATEGORY (AR)` | Category (mapped to Tag) | `Tag`, `Tag[ar-ae]` |
+| `MODIFIER GROUP (EN)`, `MODIFIER GROUP (AR)` | Modifier group with languages | `Modifier Group Name`, `Modifier Group Name[ar-ae]` |
+| `MODIFIER NAME (EN)`, `MODIFIER NAME (AR)` | Modifier name with languages | `Modifier Name`, `Modifier Name[ar-ae]` |
 | `Barcode`, `Active`, `Price`, `Images` | Standard fields | `Barcode`, `Active`, `Price[AED]`, `Image URL` |
 | `Images` with Drive links | Auto-converted | `Image URL` (with thumbnail URLs) |
+| `addon`, `addon name`, `modifier` | Modifier variations | `Modifier Name` |
 | `Item Name`, `Item ID`, `Cost` | Common variations | `Menu Item Name`, `Menu Item Id`, `Price[AED]` |
 | `product`, `sku`, `amount` | Alternative names | `Menu Item Name`, `Menu Item Id`, `Price[AED]` |
 
