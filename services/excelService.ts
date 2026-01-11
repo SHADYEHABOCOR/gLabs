@@ -250,6 +250,16 @@ export const transformMenuData = (
     }
   }
 
+  // Determine which columns actually have data
+  const columnsWithData = new Set<string>();
+  transformedData.forEach(item => {
+    Object.keys(item).forEach(key => {
+      if (item[key] !== undefined && item[key] !== null && item[key] !== '') {
+        columnsWithData.add(key);
+      }
+    });
+  });
+
   const finalOrder = [
     'Menu Item Id', 'Menu Item Name', 'Menu Item Name[ar-ae]',
     'Modifier Group Name', 'Modifier Group Name[ar-ae]',
@@ -271,9 +281,12 @@ export const transformMenuData = (
     'Image URL'
   );
 
+  // Filter finalOrder to only include columns that have data
+  const activeColumns = finalOrder.filter(col => columnsWithData.has(col));
+
   const normalizedData = transformedData.map(item => {
     const orderedItem: any = {};
-    finalOrder.forEach(key => {
+    activeColumns.forEach(key => {
       orderedItem[key] = (item[key] !== undefined && item[key] !== null) ? item[key] : '';
     });
     orderedItem._imageSource = item._imageSource || 'none';
