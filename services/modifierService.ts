@@ -1,4 +1,6 @@
 
+import * as XLSX from 'xlsx';
+
 /**
  * Modifier Group Template Transformation Service
  * Transforms raw Grubtech modifier exports into clean flat format
@@ -154,8 +156,6 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
  * Export modifier data to Excel with proper column ordering
  */
 export const downloadModifierExcel = (data: ModifierRow[], filename: string = 'modifiers') => {
-  const XLSX = require('xlsx');
-
   // Define output column order
   const outputColumns = [
     'Modifier Group Template Id',
