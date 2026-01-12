@@ -409,7 +409,15 @@ const TransformerPage: React.FC = () => {
         else if (syncControl.shouldGenerate) {
           try {
             setProcessingStatus(`Generating: ${syncControl.name}...`);
-            const prompt = `ULTRA-HD professional studio food photography of "${syncControl.name}". 8k resolution, sharp detail. ${item['Description'] || ''}`;
+            const prompt = `Generate a photo of ${syncControl.name}.
+
+This must be a clean product photo with absolutely no text, no labels, no logos, no watermarks, no words, no letters, no numbers, no writing of any kind visible anywhere in the image.
+
+Style: Professional food photography, studio lighting, white or neutral background, the food item centered and well-lit, appetizing presentation, high resolution, sharp focus.
+
+${item['Description'] ? `The dish is: ${item['Description']}` : ''}
+
+Important: Show only the finished prepared food. No raw ingredients as decoration. No pork, no alcohol.`;
             const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash-image',
               contents: { parts: [{ text: prompt }] },
