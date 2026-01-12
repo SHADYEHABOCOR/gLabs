@@ -8,11 +8,9 @@ export interface ModifierRow {
   'Modifier Group Template Id'?: string;
   'Modifier Group Template Name'?: string;
   'Modifier Group Template Name[ar-ae]'?: string;
-  'Modifier Group Template Name[de]'?: string;
   'Modifier Id'?: string;
   'Modifier Name'?: string;
   'Modifier Name[ar-ae]'?: string;
-  'Modifier Name[de]'?: string;
   'Modifier External Id'?: string;
   'Modifier Max Limit'?: string | number;
   'Price[BHD]'?: string | number;
@@ -64,11 +62,6 @@ const isTranslationRow = (row: any): boolean => {
 export const transformModifierData = (rawData: any[]): ModifierRow[] => {
   const outputRows: ModifierRow[] = [];
   let currentModifier: ModifierRow = {};
-  let currentGroupId = '';
-  let currentGroupName = '';
-  let currentGroupNameAr = '';
-  let currentGroupNameDe = '';
-  let isFirstModifierInGroup = true;
 
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i];
@@ -79,28 +72,18 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
 
     // Check if this is a translation row
     if (isTranslationRow(row)) {
-      // Extract translations and merge into current modifier
+      // Extract Arabic translations and merge into current modifier
       if (isTranslationValue(groupName)) {
         const parsed = parseTranslation(groupName);
-        if (parsed && parsed.langCode !== 'es') {
-          if (parsed.langCode === 'ar-ae') {
-            currentModifier['Modifier Group Template Name[ar-ae]'] = parsed.text;
-            currentGroupNameAr = parsed.text;
-          } else if (parsed.langCode === 'de') {
-            currentModifier['Modifier Group Template Name[de]'] = parsed.text;
-            currentGroupNameDe = parsed.text;
-          }
+        if (parsed && parsed.langCode === 'ar-ae') {
+          currentModifier['Modifier Group Template Name[ar-ae]'] = parsed.text;
         }
       }
 
       if (isTranslationValue(modifierName)) {
         const parsed = parseTranslation(modifierName);
-        if (parsed && parsed.langCode !== 'es') {
-          if (parsed.langCode === 'ar-ae') {
-            currentModifier['Modifier Name[ar-ae]'] = parsed.text;
-          } else if (parsed.langCode === 'de') {
-            currentModifier['Modifier Name[de]'] = parsed.text;
-          }
+        if (parsed && parsed.langCode === 'ar-ae') {
+          currentModifier['Modifier Name[ar-ae]'] = parsed.text;
         }
       }
       continue;
@@ -114,21 +97,13 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
       }
 
       // New modifier group starts
-      currentGroupId = groupId;
-      currentGroupName = groupName;
-      currentGroupNameAr = '';
-      currentGroupNameDe = '';
-      isFirstModifierInGroup = true;
-
       currentModifier = {
         'Modifier Group Template Id': groupId,
         'Modifier Group Template Name': groupName,
         'Modifier Group Template Name[ar-ae]': '',
-        'Modifier Group Template Name[de]': '',
         'Modifier Id': modifierId || '',
         'Modifier Name': modifierName || '',
         'Modifier Name[ar-ae]': '',
-        'Modifier Name[de]': '',
         'Modifier External Id': row['Modifier External Id'] || '',
         'Modifier Max Limit': row['Modifier Max Limit'] || '',
         'Calories(kcal)': row['Calories(kcal)'] || '',
@@ -147,17 +122,13 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
       }
 
       // New modifier in existing group
-      isFirstModifierInGroup = false;
-
       currentModifier = {
         'Modifier Group Template Id': '',
         'Modifier Group Template Name': '',
         'Modifier Group Template Name[ar-ae]': '',
-        'Modifier Group Template Name[de]': '',
         'Modifier Id': modifierId,
         'Modifier Name': modifierName || '',
         'Modifier Name[ar-ae]': '',
-        'Modifier Name[de]': '',
         'Modifier External Id': row['Modifier External Id'] || '',
         'Modifier Max Limit': row['Modifier Max Limit'] || '',
         'Calories(kcal)': row['Calories(kcal)'] || '',
@@ -190,11 +161,9 @@ export const downloadModifierExcel = (data: ModifierRow[], filename: string = 'm
     'Modifier Group Template Id',
     'Modifier Group Template Name',
     'Modifier Group Template Name[ar-ae]',
-    'Modifier Group Template Name[de]',
     'Modifier Id',
     'Modifier Name',
     'Modifier Name[ar-ae]',
-    'Modifier Name[de]',
     'Modifier External Id',
     'Modifier Max Limit',
     'Price[BHD]',
@@ -234,11 +203,9 @@ export const downloadModifierCSV = (data: ModifierRow[], filename: string = 'mod
     'Modifier Group Template Id',
     'Modifier Group Template Name',
     'Modifier Group Template Name[ar-ae]',
-    'Modifier Group Template Name[de]',
     'Modifier Id',
     'Modifier Name',
     'Modifier Name[ar-ae]',
-    'Modifier Name[de]',
     'Modifier External Id',
     'Modifier Max Limit',
     'Price[BHD]',
