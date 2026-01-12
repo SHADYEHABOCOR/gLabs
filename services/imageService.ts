@@ -210,23 +210,15 @@ export const processImageSync = async (
         await sleep(1500); 
       }
 
-      const prompt = `PROFESSIONAL FOOD PHOTOGRAPHY - ${itemName}
-        ${item['Description'] ? `Style: ${item['Description']}` : ''}
+      const prompt = `Generate a photo of ${itemName}.
 
-        CRITICAL REQUIREMENTS - MUST FOLLOW:
-        1. ABSOLUTELY NO TEXT, WORDS, LETTERS, WRITING, LABELS, LOGOS, OR NUMBERS anywhere in image
-        2. NO raw ingredients as props (no whole vegetables, fruits, or uncooked items as decoration)
-        3. NO literal interpretation of dish name (carrot cake = baked cake, NOT cake with whole carrots on top)
-        4. ONLY show the FINISHED PREPARED DISH as served to customers
-        5. Clean neutral background - no menus, no signs, no branding
+        This must be a clean product photo with absolutely no text, no labels, no logos, no watermarks, no words, no letters, no numbers, no writing of any kind visible anywhere in the image.
 
-        PROFESSIONAL STANDARDS:
-        - Restaurant-quality plated presentation
-        - Professional studio lighting, sharp focus
-        - Appetizing colors, macro detail on textures
-        - Minimalist styling - the dish itself is the focus
-        - CULTURAL COMPLIANCE: No pork, no alcohol
-        - Simple elegant plating on neutral dinnerware`;
+        Style: Professional food photography, studio lighting, white or neutral background, the food item centered and well-lit, appetizing presentation, high resolution, sharp focus.
+
+        ${item['Description'] ? `The dish is: ${item['Description']}` : ''}
+
+        Important: Show only the finished prepared food. No raw ingredients as decoration. No pork, no alcohol.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
