@@ -29,7 +29,7 @@ import JSZip from 'jszip';
 import { RawMenuItem, TransformedMenuItem, TransformationStats, TransformOptions } from '../types';
 import { transformMenuData, downloadExcel, downloadCSV } from '../services/excelService';
 import { getAIInsights, translateMissingArabic, translateArabicToEnglish, estimateCaloriesForItems } from '../services/geminiService';
-import { processImageSync, getLocalDB, bulkSaveToDB, removeFromDB, getDBKey, saveToDB, convertToJpg } from '../services/imageService';
+import { processImageSync, getLocalDB, bulkSaveToDB, removeFromDB, getDBKey, saveToDB, convertToJpg, sanitizeFileName } from '../services/imageService';
 import { upscaleImageUrl } from '../services/scraperService';
 import { GoogleGenAI } from "@google/genai";
 
@@ -123,7 +123,8 @@ const TransformerPage: React.FC = () => {
     const newPending: PendingAsset[] = [];
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      const name = f.name.substring(0, f.name.lastIndexOf('.')).trim();
+      const rawName = f.name.substring(0, f.name.lastIndexOf('.')).trim();
+      const name = sanitizeFileName(rawName);
       const reader = new FileReader();
       const dataUrl = await new Promise<string>(r => { reader.onload = ev => r(ev.target?.result as string); reader.readAsDataURL(f); });
       newPending.push({ id: Math.random().toString(36).substr(2, 9), name, data: dataUrl });

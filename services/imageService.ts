@@ -24,14 +24,28 @@ const getDB = (): Promise<IDBDatabase> => {
 };
 
 /**
+ * Cleans a filename to extract just the item name.
+ * Converts "2._Crunchy_BBQ_Burger" to "Crunchy BBQ Burger"
+ */
+export const sanitizeFileName = (filename: string): string => {
+  if (!filename) return '';
+  return filename
+    .replace(/^\d+[._-]*/, '')           // Remove leading numbers and separators (e.g., "2._" or "15-")
+    .replace(/[_-]/g, ' ')               // Replace underscores and dashes with spaces
+    .replace(/[^a-zA-Z0-9\s]/g, '')      // Remove special characters
+    .replace(/\s+/g, ' ')                // Collapse multiple spaces
+    .trim();
+};
+
+/**
  * Normalizes strings for database lookup.
  */
 export const getDBKey = (str: string) => {
   if (!str) return 'img_unknown';
   return `img_${str.toString().toLowerCase().trim()
-    .replace(/[_-]/g, ' ') 
-    .replace(/[^a-z0-9\s]/g, '') 
-    .replace(/\s+/g, '_')}`; 
+    .replace(/[_-]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '_')}`;
 };
 
 /**
