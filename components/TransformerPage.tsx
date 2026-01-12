@@ -31,6 +31,7 @@ import { transformMenuData, downloadExcel, downloadCSV } from '../services/excel
 import { getAIInsights, translateMissingArabic, translateArabicToEnglish, estimateCaloriesForItems } from '../services/geminiService';
 import { processImageSync, getLocalDB, bulkSaveToDB, removeFromDB, getDBKey, saveToDB, convertToJpg, sanitizeFileName } from '../services/imageService';
 import { upscaleImageUrl } from '../services/scraperService';
+import { transformModifierData, downloadModifierExcel, downloadModifierCSV } from '../services/modifierService';
 import { GoogleGenAI } from "@google/genai";
 
 const Switch: React.FC<{ checked: boolean, onChange: () => void, activeColor?: string }> = ({ checked, onChange, activeColor = "bg-blue-600" }) => (
@@ -79,7 +80,7 @@ const TransformerPage: React.FC = () => {
   const [options, setOptions] = useState<TransformOptions>({
     applyTitleCase: true, extractArabic: true, splitPrice: true,
     useStockImages: false, autoTranslate: false, autoTranslateArToEn: false, estimateCalories: false,
-    generateAndSyncImages: false,
+    generateAndSyncImages: false, modifiersFormatting: false,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -262,8 +263,35 @@ const TransformerPage: React.FC = () => {
     setProcessingStatus('Analyzing headers...');
     try {
       await new Promise(r => setTimeout(r, 600));
+
+      // Handle Modifiers Mode separately
+      if (options.modifiersFormatting) {
+        setProcessingStatus('Transforming modifier data...');
+        const modifierData = transformModifierData(rawData);
+
+        if (modifierData.length === 0 && rawData.length > 0) {
+          setError("No modifier groups could be identified. Ensure your file contains Modifier Group Template data.");
+          setIsProcessing(false); return;
+        }
+
+        setTransformedData(modifierData);
+        setStats({
+          totalRawRows: rawData.length,
+          totalItemsProcessed: modifierData.length,
+          arabicTranslationsFound: modifierData.filter(r => r['Modifier Group Template Name[ar-ae]'] || r['Modifier Name[ar-ae]']).length,
+          autoTranslatedCount: 0,
+          caloriesEstimatedCount: 0,
+          imagesFromDB: 0,
+          imagesGenerated: 0,
+          currenciesDetected: [],
+          anomalies: []
+        });
+        setIsProcessing(false);
+        return;
+      }
+
       let { data, stats: newStats } = transformMenuData(rawData, options);
-      
+
       if (newStats.totalItemsProcessed === 0 && rawData.length > 0) {
         setError("No menu items could be identified. Check your file headers or ensure your sheet contains item data.");
         setIsProcessing(false); return;
@@ -451,6 +479,7 @@ const TransformerPage: React.FC = () => {
             <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center"><Settings2 className="w-4 h-4 mr-2" /> Step 2: Configuration</h2>
             <div className="space-y-3">
               {[
+                { label: 'Modifiers Mode', sub: 'Transform modifier group templates', opt: 'modifiersFormatting', badge: 'NEW', color: 'bg-purple-50/50' },
                 { label: 'Arabic Extraction', sub: 'Merge rows with [ar-ae] prefix', opt: 'extractArabic' },
                 { label: 'Arabic to English', sub: 'Translate content to English', opt: 'autoTranslateArToEn', badge: 'SMART AI', color: 'bg-green-50/50' },
                 { label: 'English to Arabic', sub: 'Translate content to Arabic', opt: 'autoTranslate', badge: 'SMART AI', color: 'bg-blue-50/50' },
@@ -574,17 +603,26 @@ const TransformerPage: React.FC = () => {
                   </table>
                 </div>
                 <div className="p-4 bg-slate-50 border-t flex flex-col sm:flex-row gap-4 items-center justify-between">
-                  <div className="flex items-center space-x-2 text-xs font-medium">
-                    <span className="flex items-center"><span className="w-2 h-2 bg-indigo-600 rounded-full mr-1.5" />From DB</span>
-                    <span className="flex items-center"><span className="w-2 h-2 bg-purple-600 rounded-full mr-1.5" />Generated</span>
-                  </div>
+                  {!options.modifiersFormatting && (
+                    <div className="flex items-center space-x-2 text-xs font-medium">
+                      <span className="flex items-center"><span className="w-2 h-2 bg-indigo-600 rounded-full mr-1.5" />From DB</span>
+                      <span className="flex items-center"><span className="w-2 h-2 bg-purple-600 rounded-full mr-1.5" />Generated</span>
+                    </div>
+                  )}
+                  {options.modifiersFormatting && (
+                    <div className="flex items-center space-x-2 text-xs font-medium">
+                      <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-[10px] font-bold">MODIFIERS MODE</span>
+                    </div>
+                  )}
                   <div className="flex gap-2">
-                    <button onClick={() => downloadCSV(transformedData, "menu")} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">CSV</button>
-                    <button onClick={downloadAllImages} disabled={isZipping || !transformedData.some(i => i['Image URL'])} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold flex items-center disabled:opacity-50 transition-all active:scale-95">
-                      {isZipping ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileArchive className="w-4 h-4 mr-2" />} 
-                      <span>{isZipping ? `Packing ZIP (${zipProgress.current}/${zipProgress.total})...` : 'ZIP Images (JPG)'}</span>
-                    </button>
-                    <button onClick={() => downloadExcel(transformedData, "menu")} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200">Standard Excel</button>
+                    <button onClick={() => options.modifiersFormatting ? downloadModifierCSV(transformedData, "modifiers") : downloadCSV(transformedData, "menu")} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">CSV</button>
+                    {!options.modifiersFormatting && (
+                      <button onClick={downloadAllImages} disabled={isZipping || !transformedData.some(i => i['Image URL'])} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold flex items-center disabled:opacity-50 transition-all active:scale-95">
+                        {isZipping ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileArchive className="w-4 h-4 mr-2" />}
+                        <span>{isZipping ? `Packing ZIP (${zipProgress.current}/${zipProgress.total})...` : 'ZIP Images (JPG)'}</span>
+                      </button>
+                    )}
+                    <button onClick={() => options.modifiersFormatting ? downloadModifierExcel(transformedData, "modifiers") : downloadExcel(transformedData, "menu")} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200">Standard Excel</button>
                   </div>
                 </div>
               </div>

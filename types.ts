@@ -54,4 +54,5 @@ export interface TransformOptions {
   autoTranslateArToEn: boolean;
   estimateCalories: boolean;
   generateAndSyncImages: boolean;
+  modifiersFormatting: boolean;
 }
