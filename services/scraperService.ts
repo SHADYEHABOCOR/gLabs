@@ -143,22 +143,24 @@ const extractUberEatsItems = (data: any, results: ScrapedItem[] = []): ScrapedIt
 };
 
 /**
- * Try to fetch UberEats menu via their internal API
+ * Try to fetch UberEats menu via their internal API or third-party services
  */
-const fetchUberEatsApi = async (storeId: string): Promise<ScrapedItem[]> => {
+const fetchUberEatsApi = async (storeId: string, storeName?: string): Promise<ScrapedItem[]> => {
   const scrapedItems: ScrapedItem[] = [];
 
-  // UberEats API endpoints to try
+  // UberEats API endpoints to try (various versions)
   const apiEndpoints = [
     `https://www.ubereats.com/api/getStoreV1?storeUuid=${storeId}`,
     `https://www.ubereats.com/_p/api/getStoreV1?storeUuid=${storeId}`,
+    `https://www.ubereats.com/api/getStoreFeedV1?storeUuid=${storeId}`,
+    `https://www.ubereats.com/_p/api/getStoreFeedV1?storeUuid=${storeId}`,
   ];
 
   for (const endpoint of apiEndpoints) {
     try {
       const data = await fetchWithProxy(endpoint);
       if (data && typeof data === 'object') {
-        console.log('Got UberEats API response');
+        console.log('Got UberEats API response from:', endpoint);
         extractUberEatsItems(data, scrapedItems);
         if (scrapedItems.length > 0) {
           return scrapedItems;
@@ -169,7 +171,45 @@ const fetchUberEatsApi = async (storeId: string): Promise<ScrapedItem[]> => {
     }
   }
 
+  // Try web archive/cached version
+  try {
+    const waybackUrl = `https://archive.org/wayback/available?url=ubereats.com/store/${storeName || storeId}`;
+    const waybackData = await fetchWithProxy(waybackUrl);
+    if (waybackData?.archived_snapshots?.closest?.url) {
+      console.log('Found Wayback Machine snapshot');
+      const cachedHtml = await fetchWithProxy(waybackData.archived_snapshots.closest.url);
+      if (cachedHtml && typeof cachedHtml === 'string') {
+        const nextDataMatch = cachedHtml.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+        if (nextDataMatch && nextDataMatch[1]) {
+          try {
+            const nextData = JSON.parse(nextDataMatch[1]);
+            extractUberEatsItems(nextData, scrapedItems);
+          } catch (e) {}
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Wayback Machine lookup failed');
+  }
+
   return scrapedItems;
+};
+
+/**
+ * Extract store name from UberEats URL
+ */
+const extractUberEatsStoreName = (url: string): string | null => {
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    // Format: /store/store-name/UUID
+    if (pathParts.length >= 2 && pathParts[0] === 'store') {
+      return pathParts[1]; // Return the store name slug
+    }
+    return null;
+  } catch {
+    return null;
+  }
 };
 
 /**
@@ -181,10 +221,12 @@ const scrapeUberEats = async (url: string): Promise<ScrapedItem[]> => {
 
   // Try to extract store ID and use API first
   const storeId = extractUberEatsStoreId(url);
+  const storeName = extractUberEatsStoreName(url);
+
   if (storeId) {
-    console.log('Extracted UberEats store ID:', storeId);
+    console.log('Extracted UberEats store ID:', storeId, 'Store name:', storeName);
     try {
-      const apiItems = await fetchUberEatsApi(storeId);
+      const apiItems = await fetchUberEatsApi(storeId, storeName || undefined);
       if (apiItems.length > 0) {
         return apiItems;
       }
@@ -380,7 +422,9 @@ const fetchWithProxy = async (targetUrl: string): Promise<any> => {
   const proxies = [
     { url: `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&_=${Date.now()}`, type: 'allorigins' },
     { url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, type: 'direct' },
-    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`, type: 'direct' }
+    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`, type: 'direct' },
+    { url: `https://thingproxy.freeboard.io/fetch/${targetUrl}`, type: 'direct' },
+    { url: `https://cors-anywhere.herokuapp.com/${targetUrl}`, type: 'direct' },
   ];
 
   for (const proxy of proxies) {
