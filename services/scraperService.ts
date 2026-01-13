@@ -12,7 +12,7 @@ export const upscaleImageUrl = (url: string): string => {
   if (!url) return url;
   try {
     const urlObj = new URL(url.replace(/&amp;/g, '&'));
-    
+
     // 1. DeliveryHero / Talabat patterns: ?width=172&height=172
     if (url.includes('images.deliveryhero.io')) {
       urlObj.searchParams.delete('width');
@@ -29,7 +29,18 @@ export const upscaleImageUrl = (url: string): string => {
 
     // 3. Grubtech specific size parameters
     urlObj.searchParams.delete('size');
-    
+
+    // 4. UberEats Cloudfront patterns - request larger size
+    if (url.includes('cloudfront.net') || url.includes('uber.com')) {
+      // UberEats uses various size parameters, try to get max quality
+      if (urlObj.searchParams.has('width')) {
+        urlObj.searchParams.set('width', '1200');
+      }
+      if (urlObj.searchParams.has('height')) {
+        urlObj.searchParams.set('height', '1200');
+      }
+    }
+
     return urlObj.toString();
   } catch (e) {
     // If URL parsing fails, try regex fallback
@@ -37,6 +48,181 @@ export const upscaleImageUrl = (url: string): string => {
       .replace(/([?&])width=\d+/gi, '$1width=1200')
       .replace(/([?&])height=\d+/gi, '$1height=1200')
       .replace(/&amp;/g, '&');
+  }
+};
+
+/**
+ * Check if URL is an UberEats store URL
+ */
+const isUberEatsUrl = (url: string): boolean => {
+  return url.includes('ubereats.com/store') || url.includes('ubereats.com/city');
+};
+
+/**
+ * Extract items from UberEats __NEXT_DATA__ JSON structure
+ */
+const extractUberEatsItems = (data: any, results: ScrapedItem[] = []): ScrapedItem[] => {
+  if (!data || typeof data !== 'object') return results;
+
+  // Handle arrays
+  if (Array.isArray(data)) {
+    data.forEach(item => extractUberEatsItems(item, results));
+    return results;
+  }
+
+  // UberEats stores menu items in various nested structures
+  // Look for objects that have title/name and imageUrl patterns
+  const title = data.title || data.name || data.itemTitle || data.displayName;
+  const uuid = data.uuid || data.itemUuid || data.id;
+
+  // UberEats image patterns
+  let imageUrl = data.imageUrl || data.heroImageUrl || data.squareImageUrl || data.image;
+
+  // Sometimes images are in nested objects
+  if (!imageUrl && data.heroImage) {
+    imageUrl = data.heroImage.url || data.heroImage;
+  }
+  if (!imageUrl && data.image && typeof data.image === 'object') {
+    imageUrl = data.image.url || data.image.source;
+  }
+  if (!imageUrl && data.images && Array.isArray(data.images) && data.images.length > 0) {
+    imageUrl = data.images[0].url || data.images[0];
+  }
+
+  // Check if this looks like a menu item
+  if (title && typeof title === 'string' && title.length > 1 && title.length < 200) {
+    if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+      const itemId = uuid ? uuid.toString() : `uber-${results.length}`;
+
+      // Avoid duplicates
+      if (!results.find(r => r.name === title)) {
+        results.push({
+          id: itemId,
+          name: title.trim(),
+          imageUrl: upscaleImageUrl(imageUrl)
+        });
+      }
+    }
+  }
+
+  // Recurse into all object values
+  Object.values(data).forEach(val => {
+    if (val && typeof val === 'object') {
+      extractUberEatsItems(val, results);
+    }
+  });
+
+  return results;
+};
+
+/**
+ * Scrape UberEats store page
+ */
+const scrapeUberEats = async (url: string): Promise<ScrapedItem[]> => {
+  console.log('Scraping UberEats URL:', url);
+
+  try {
+    const html = await fetchWithProxy(url);
+    if (!html || typeof html !== 'string') {
+      throw new Error('Failed to fetch UberEats page');
+    }
+
+    const scrapedItems: ScrapedItem[] = [];
+
+    // Look for __NEXT_DATA__ script tag (Next.js SSR data)
+    const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+    if (nextDataMatch && nextDataMatch[1]) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        console.log('Found __NEXT_DATA__, extracting items...');
+        extractUberEatsItems(nextData, scrapedItems);
+      } catch (e) {
+        console.warn('Failed to parse __NEXT_DATA__:', e);
+      }
+    }
+
+    // Also look for other embedded JSON data
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const scripts = Array.from(doc.querySelectorAll('script'));
+
+    for (const script of scripts) {
+      const content = script.textContent || '';
+      // Look for menu-related JSON
+      if (content.length > 500 && (
+        content.includes('menuItems') ||
+        content.includes('itemTitle') ||
+        content.includes('catalogSectionsMap') ||
+        content.includes('subsectionsMap')
+      )) {
+        // Try to extract JSON objects from the script
+        try {
+          // Find valid JSON objects by tracking brace depth
+          let depth = 0;
+          let startIdx = -1;
+          for (let i = 0; i < content.length; i++) {
+            if (content[i] === '{') {
+              if (depth === 0) startIdx = i;
+              depth++;
+            } else if (content[i] === '}') {
+              depth--;
+              if (depth === 0 && startIdx !== -1) {
+                try {
+                  const jsonStr = content.substring(startIdx, i + 1);
+                  if (jsonStr.length > 100) {
+                    const parsed = JSON.parse(jsonStr);
+                    extractUberEatsItems(parsed, scrapedItems);
+                  }
+                } catch (e) {}
+                startIdx = -1;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    // Fallback: try DOM-based scraping for visible items
+    if (scrapedItems.length === 0) {
+      console.log('Falling back to DOM scraping...');
+      const images = Array.from(doc.querySelectorAll('img[src*="cloudfront"], img[src*="uber"], img[data-src*="cloudfront"]'));
+
+      images.forEach((img, idx) => {
+        const src = img.getAttribute('src') || img.getAttribute('data-src');
+        if (!src || src.includes('logo') || src.includes('avatar') || src.length < 20) return;
+
+        // Walk up the DOM to find item name
+        let parent = img.parentElement;
+        let itemName = '';
+        for (let i = 0; i < 8; i++) {
+          if (!parent) break;
+          const potentialNames = parent.querySelectorAll('h3, h4, [data-testid*="item"], [class*="itemTitle"], [class*="ItemTitle"]');
+          for (const el of Array.from(potentialNames)) {
+            const text = el.textContent?.trim();
+            if (text && text.length > 1 && text.length < 100 && !text.includes('$')) {
+              itemName = text;
+              break;
+            }
+          }
+          if (itemName) break;
+          parent = parent.parentElement;
+        }
+
+        if (itemName && src && !scrapedItems.find(item => item.name === itemName)) {
+          scrapedItems.push({
+            id: `uber-dom-${idx}`,
+            name: itemName,
+            imageUrl: upscaleImageUrl(src)
+          });
+        }
+      });
+    }
+
+    console.log(`Found ${scrapedItems.length} items from UberEats`);
+    return scrapedItems;
+  } catch (err) {
+    console.error('UberEats scraping failed:', err);
+    throw err;
   }
 };
 
@@ -170,9 +356,15 @@ const fetchFromDirectApi = async (menuId: string, locale: string = 'en-us'): Pro
 };
 
 /**
- * Scrapes a Grubtech Menu Preview URL using multiple discovery strategies.
+ * Scrapes menu data from various sources (Grubtech, UberEats, etc.)
  */
 export const scrapeMenuPreview = async (url: string): Promise<ScrapedItem[]> => {
+  // Check if this is an UberEats URL
+  if (isUberEatsUrl(url)) {
+    return scrapeUberEats(url);
+  }
+
+  // Original Grubtech scraping logic
   let menuId: string | null = null;
   let locale = 'en-us';
 
