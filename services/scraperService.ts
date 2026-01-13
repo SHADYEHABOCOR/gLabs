@@ -59,6 +59,33 @@ const isUberEatsUrl = (url: string): boolean => {
 };
 
 /**
+ * Extract UberEats store UUID from URL
+ * URL format: ubereats.com/store/store-name/STORE_UUID
+ */
+const extractUberEatsStoreId = (url: string): string | null => {
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    // Format: /store/store-name/UUID or just /store/UUID
+    if (pathParts.length >= 2 && pathParts[0] === 'store') {
+      // UUID is typically the last part
+      const lastPart = pathParts[pathParts.length - 1];
+      // UberEats UUIDs are base64-like strings
+      if (lastPart && lastPart.length > 10 && !lastPart.includes('-')) {
+        return lastPart;
+      }
+      // Sometimes the store name contains the ID
+      if (pathParts.length >= 3) {
+        return pathParts[2];
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Extract items from UberEats __NEXT_DATA__ JSON structure
  */
 const extractUberEatsItems = (data: any, results: ScrapedItem[] = []): ScrapedItem[] => {
@@ -116,18 +143,61 @@ const extractUberEatsItems = (data: any, results: ScrapedItem[] = []): ScrapedIt
 };
 
 /**
+ * Try to fetch UberEats menu via their internal API
+ */
+const fetchUberEatsApi = async (storeId: string): Promise<ScrapedItem[]> => {
+  const scrapedItems: ScrapedItem[] = [];
+
+  // UberEats API endpoints to try
+  const apiEndpoints = [
+    `https://www.ubereats.com/api/getStoreV1?storeUuid=${storeId}`,
+    `https://www.ubereats.com/_p/api/getStoreV1?storeUuid=${storeId}`,
+  ];
+
+  for (const endpoint of apiEndpoints) {
+    try {
+      const data = await fetchWithProxy(endpoint);
+      if (data && typeof data === 'object') {
+        console.log('Got UberEats API response');
+        extractUberEatsItems(data, scrapedItems);
+        if (scrapedItems.length > 0) {
+          return scrapedItems;
+        }
+      }
+    } catch (e) {
+      console.warn(`UberEats API endpoint failed: ${endpoint}`);
+    }
+  }
+
+  return scrapedItems;
+};
+
+/**
  * Scrape UberEats store page
  */
 const scrapeUberEats = async (url: string): Promise<ScrapedItem[]> => {
   console.log('Scraping UberEats URL:', url);
+  const scrapedItems: ScrapedItem[] = [];
+
+  // Try to extract store ID and use API first
+  const storeId = extractUberEatsStoreId(url);
+  if (storeId) {
+    console.log('Extracted UberEats store ID:', storeId);
+    try {
+      const apiItems = await fetchUberEatsApi(storeId);
+      if (apiItems.length > 0) {
+        return apiItems;
+      }
+    } catch (e) {
+      console.warn('UberEats API failed, falling back to HTML scraping');
+    }
+  }
 
   try {
     const html = await fetchWithProxy(url);
     if (!html || typeof html !== 'string') {
       throw new Error('Failed to fetch UberEats page');
     }
-
-    const scrapedItems: ScrapedItem[] = [];
 
     // Look for __NEXT_DATA__ script tag (Next.js SSR data)
     const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
@@ -153,7 +223,8 @@ const scrapeUberEats = async (url: string): Promise<ScrapedItem[]> => {
         content.includes('menuItems') ||
         content.includes('itemTitle') ||
         content.includes('catalogSectionsMap') ||
-        content.includes('subsectionsMap')
+        content.includes('subsectionsMap') ||
+        content.includes('"title"') && content.includes('"imageUrl"')
       )) {
         // Try to extract JSON objects from the script
         try {
@@ -180,6 +251,18 @@ const scrapeUberEats = async (url: string): Promise<ScrapedItem[]> => {
           }
         } catch (e) {}
       }
+    }
+
+    // Also try to find JSON in script tags with type="application/json"
+    const jsonScripts = Array.from(doc.querySelectorAll('script[type="application/json"]'));
+    for (const script of jsonScripts) {
+      try {
+        const content = script.textContent || '';
+        if (content.length > 100) {
+          const parsed = JSON.parse(content);
+          extractUberEatsItems(parsed, scrapedItems);
+        }
+      } catch (e) {}
     }
 
     // Fallback: try DOM-based scraping for visible items
