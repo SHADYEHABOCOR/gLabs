@@ -69,6 +69,7 @@ const TransformerPage: React.FC = () => {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
   const [transformedData, setTransformedData] = useState<any[] | null>(null);
+  const [modifierOutputColumns, setModifierOutputColumns] = useState<string[]>([]);
   const [stats, setStats] = useState<TransformationStats | null>(null);
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +105,7 @@ const TransformerPage: React.FC = () => {
       setFile(uploadedFile);
       setError(null);
       setTransformedData(null);
+      setModifierOutputColumns([]);
       setStats(null);
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -269,6 +271,7 @@ const TransformerPage: React.FC = () => {
         setProcessingStatus('Transforming modifier data...');
         const modifierResult = transformModifierData(rawData);
         let modifierData = modifierResult.data;
+        let outputColumns = modifierResult.outputColumns;
 
         if (modifierData.length === 0 && rawData.length > 0) {
           setError("No modifier groups could be identified. Ensure your file contains Modifier Group Template data.");
@@ -320,6 +323,7 @@ const TransformerPage: React.FC = () => {
         }
 
         setTransformedData(modifierData);
+        setModifierOutputColumns(outputColumns);
         setStats(modifierStats);
         setIsProcessing(false);
         return;
@@ -665,7 +669,7 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
                         <span>{isZipping ? `Packing ZIP (${zipProgress.current}/${zipProgress.total})...` : 'ZIP Images (JPG)'}</span>
                       </button>
                     )}
-                    <button onClick={() => options.modifiersFormatting ? downloadModifierExcel(transformedData, "modifiers") : downloadExcel(transformedData, "menu")} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200">Standard Excel</button>
+                    <button onClick={() => options.modifiersFormatting ? downloadModifierExcel(transformedData, "modifiers", modifierOutputColumns) : downloadExcel(transformedData, "menu")} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200">Standard Excel</button>
                   </div>
                 </div>
               </div>

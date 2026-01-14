@@ -198,27 +198,13 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
 
 /**
  * Export modifier data to Excel with proper column ordering
+ * Uses dynamic columns from transformation (original + generated) instead of hardcoded template
  */
-export const downloadModifierExcel = (data: ModifierRow[], filename: string = 'modifiers') => {
-  // Define output column order
-  const outputColumns = [
-    'Modifier Group Template Id',
-    'Modifier Group Template Name',
-    'Modifier Group Template Name[ar-ae]',
-    'Modifier Id',
-    'Modifier Name',
-    'Modifier Name[ar-ae]',
-    'Modifier External Id',
-    'Modifier Max Limit',
-    'Price[BHD]',
-    'Price[AED]',
-    'Price[SAR]',
-    'Price[GBP]',
-    'Price[QAR]',
-    'Calories(kcal)'
-  ];
+export const downloadModifierExcel = (data: ModifierRow[], filename: string = 'modifiers', columns?: string[]) => {
+  // Use provided columns or derive from data keys (which are already normalized)
+  const outputColumns = columns ?? (data.length > 0 ? Object.keys(data[0]) : []);
 
-  // Ensure all rows have all columns
+  // Ensure all rows have all columns in the correct order
   const normalizedData = data.map(row => {
     const newRow: any = {};
     outputColumns.forEach(col => {
