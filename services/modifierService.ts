@@ -133,33 +133,32 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
       const groupNameIsArabic = hasArabicText(groupName);
       const modifierNameIsArabic = hasArabicText(modifierName);
 
-      // New modifier group starts
-      currentModifier = {
-        'Modifier Group Template Id': groupId,
-        'Modifier Group Template Name': groupNameIsArabic ? '' : groupName,
-        'Modifier Group Template Name[ar-ae]': groupNameIsArabic ? groupName : '',
-        'Modifier Id': modifierId || '',
-        'Modifier Name': modifierNameIsArabic ? '' : (modifierName || ''),
-        'Modifier Name[ar-ae]': modifierNameIsArabic ? (modifierName || '') : '',
-        'Modifier External Id': row['Modifier External Id'] || '',
-        'Modifier Max Limit': row['Modifier Max Limit'] || '',
-        'Calories(kcal)': row['Calories(kcal)'] || '',
-      };
+      // Copy ALL original columns from the row to preserve everything
+      currentModifier = { ...row };
 
-      // Handle price
+      // Override specific fields for Arabic handling
+      if (row['Modifier Group Template Name']) {
+        currentModifier['Modifier Group Template Name'] = groupNameIsArabic ? '' : groupName;
+        if (groupNameIsArabic) {
+          currentModifier['Modifier Group Template Name[ar-ae]'] = groupName;
+          generatedColumns.add('Modifier Group Template Name[ar-ae]');
+        }
+      }
+
+      if (row['Modifier Name']) {
+        currentModifier['Modifier Name'] = modifierNameIsArabic ? '' : (modifierName || '');
+        if (modifierNameIsArabic) {
+          currentModifier['Modifier Name[ar-ae]'] = modifierName || '';
+          generatedColumns.add('Modifier Name[ar-ae]');
+        }
+      }
+
+      // Handle price transformation
       if (row['Modifier Price'] && row['Modifier Price Currency']) {
         const currency = String(row['Modifier Price Currency']).toUpperCase();
         const priceColumn = `Price[${currency}]`;
         currentModifier[priceColumn] = row['Modifier Price'];
         generatedColumns.add(priceColumn);
-      }
-
-      // Mark that we pre-filled the [ar-ae] columns
-      if (groupNameIsArabic) {
-        generatedColumns.add('Modifier Group Template Name[ar-ae]');
-      }
-      if (modifierNameIsArabic) {
-        generatedColumns.add('Modifier Name[ar-ae]');
       }
 
     } else if (modifierId) {
@@ -171,30 +170,24 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
       // Check if modifier name is Arabic
       const modifierNameIsArabic = hasArabicText(modifierName);
 
-      // New modifier in existing group
-      currentModifier = {
-        'Modifier Group Template Id': '',
-        'Modifier Group Template Name': '',
-        'Modifier Group Template Name[ar-ae]': '',
-        'Modifier Id': modifierId,
-        'Modifier Name': modifierNameIsArabic ? '' : (modifierName || ''),
-        'Modifier Name[ar-ae]': modifierNameIsArabic ? (modifierName || '') : '',
-        'Modifier External Id': row['Modifier External Id'] || '',
-        'Modifier Max Limit': row['Modifier Max Limit'] || '',
-        'Calories(kcal)': row['Calories(kcal)'] || '',
-      };
+      // Copy ALL original columns from the row
+      currentModifier = { ...row };
 
-      // Handle price
+      // Override specific fields for Arabic handling
+      if (row['Modifier Name']) {
+        currentModifier['Modifier Name'] = modifierNameIsArabic ? '' : (modifierName || '');
+        if (modifierNameIsArabic) {
+          currentModifier['Modifier Name[ar-ae]'] = modifierName || '';
+          generatedColumns.add('Modifier Name[ar-ae]');
+        }
+      }
+
+      // Handle price transformation
       if (row['Modifier Price'] && row['Modifier Price Currency']) {
         const currency = String(row['Modifier Price Currency']).toUpperCase();
         const priceColumn = `Price[${currency}]`;
         currentModifier[priceColumn] = row['Modifier Price'];
         generatedColumns.add(priceColumn);
-      }
-
-      // Mark that we pre-filled the [ar-ae] column
-      if (modifierNameIsArabic) {
-        generatedColumns.add('Modifier Name[ar-ae]');
       }
     }
   }
