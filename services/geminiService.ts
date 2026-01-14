@@ -223,12 +223,23 @@ export const translateArabicToEnglish = async (
 ): Promise<{ data: TransformedMenuItem[], count: number }> => {
   const arabicRegex = /[\u0600-\u06FF]/;
   const itemsToTranslate = data.filter(item => {
+    // Check BOTH main columns and [ar-ae] columns for Arabic content
     const name = (item['Menu Item Name'] || '').toString();
+    const nameAr = (item['Menu Item Name[ar-ae]'] || '').toString();
     const desc = (item['Description'] || '').toString();
+    const descAr = (item['Description[ar-ae]'] || '').toString();
     const brandName = (item['Brand Name'] || '').toString();
-    const modGroup = (item['Modifier Group Name'] || '').toString();
+    const brandNameAr = (item['Brand Name[ar-ae]'] || '').toString();
+    const modGroup = (item['Modifier Group Name'] || item['Modifier Group Template Name'] || '').toString();
+    const modGroupAr = (item['Modifier Group Name[ar-ae]'] || item['Modifier Group Template Name[ar-ae]'] || '').toString();
     const modName = (item['Modifier Name'] || '').toString();
-    return arabicRegex.test(name) || arabicRegex.test(desc) || arabicRegex.test(brandName) || arabicRegex.test(modGroup) || arabicRegex.test(modName);
+    const modNameAr = (item['Modifier Name[ar-ae]'] || '').toString();
+
+    return arabicRegex.test(name) || arabicRegex.test(nameAr) ||
+           arabicRegex.test(desc) || arabicRegex.test(descAr) ||
+           arabicRegex.test(brandName) || arabicRegex.test(brandNameAr) ||
+           arabicRegex.test(modGroup) || arabicRegex.test(modGroupAr) ||
+           arabicRegex.test(modName) || arabicRegex.test(modNameAr);
   });
 
   if (itemsToTranslate.length === 0) return { data, count: 0 };
@@ -246,20 +257,26 @@ export const translateArabicToEnglish = async (
 
   const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
     const translationList = batch.map(item => {
+      // Check both main columns and [ar-ae] columns for Arabic text
       const name = (item['Menu Item Name'] || '').toString();
+      const nameAr = (item['Menu Item Name[ar-ae]'] || '').toString();
       const desc = (item['Description'] || '').toString();
+      const descAr = (item['Description[ar-ae]'] || '').toString();
       const brandName = (item['Brand Name'] || '').toString();
-      const modGroup = (item['Modifier Group Name'] || '').toString();
+      const brandNameAr = (item['Brand Name[ar-ae]'] || '').toString();
+      const modGroup = (item['Modifier Group Name'] || item['Modifier Group Template Name'] || '').toString();
+      const modGroupAr = (item['Modifier Group Name[ar-ae]'] || item['Modifier Group Template Name[ar-ae]'] || '').toString();
       const modName = (item['Modifier Name'] || '').toString();
+      const modNameAr = (item['Modifier Name[ar-ae]'] || '').toString();
 
       return {
-        id: item['Menu Item Id'],
-        // Only send Arabic fields for translation to English
-        name: arabicRegex.test(name) ? name : '',
-        description: arabicRegex.test(desc) ? desc : '',
-        brandName: arabicRegex.test(brandName) ? brandName : '',
-        modifierGroup: arabicRegex.test(modGroup) ? modGroup : '',
-        modifierName: arabicRegex.test(modName) ? modName : ''
+        id: item['Menu Item Id'] || item['Modifier Id'],
+        // Send Arabic from either main column or [ar-ae] column
+        name: arabicRegex.test(name) ? name : (arabicRegex.test(nameAr) ? nameAr : ''),
+        description: arabicRegex.test(desc) ? desc : (arabicRegex.test(descAr) ? descAr : ''),
+        brandName: arabicRegex.test(brandName) ? brandName : (arabicRegex.test(brandNameAr) ? brandNameAr : ''),
+        modifierGroup: arabicRegex.test(modGroup) ? modGroup : (arabicRegex.test(modGroupAr) ? modGroupAr : ''),
+        modifierName: arabicRegex.test(modName) ? modName : (arabicRegex.test(modNameAr) ? modNameAr : '')
       };
     });
 
@@ -302,39 +319,76 @@ export const translateArabicToEnglish = async (
       const results = JSON.parse(response.text || '[]');
 
       results.forEach((res: any) => {
-        const index = translatedData.findIndex(item => item['Menu Item Id'] === res.id);
-        if (index !== -1) {
-          const originalName = translatedData[index]['Menu Item Name'];
-          const originalDesc = translatedData[index]['Description'];
-          const originalBrandName = translatedData[index]['Brand Name'];
-          const originalModGroup = translatedData[index]['Modifier Group Name'];
-          const originalModName = translatedData[index]['Modifier Name'];
+        // Try to find by Menu Item Id or Modifier Id
+        let index = translatedData.findIndex(item => item['Menu Item Id'] === res.id);
+        if (index === -1) {
+          index = translatedData.findIndex(item => item['Modifier Id'] === res.id);
+        }
 
-          // Translate name: Arabic -> English, keep Arabic in [ar-ae]
-          if (arabicRegex.test(originalName) && res.name_en) {
-             translatedData[index]['Menu Item Name[ar-ae]'] = originalName;
-             translatedData[index]['Menu Item Name'] = res.name_en;
+        if (index !== -1) {
+          const item = translatedData[index];
+
+          // Check if Arabic is in main column or [ar-ae] column
+          const nameMain = (item['Menu Item Name'] || '').toString();
+          const nameAr = (item['Menu Item Name[ar-ae]'] || '').toString();
+          const descMain = (item['Description'] || '').toString();
+          const descAr = (item['Description[ar-ae]'] || '').toString();
+          const brandMain = (item['Brand Name'] || '').toString();
+          const brandAr = (item['Brand Name[ar-ae]'] || '').toString();
+          const modGroupMain = (item['Modifier Group Name'] || item['Modifier Group Template Name'] || '').toString();
+          const modGroupAr = (item['Modifier Group Name[ar-ae]'] || item['Modifier Group Template Name[ar-ae]'] || '').toString();
+          const modNameMain = (item['Modifier Name'] || '').toString();
+          const modNameAr = (item['Modifier Name[ar-ae]'] || '').toString();
+
+          // Translate name: If Arabic is in [ar-ae] column, put English in main column
+          if ((arabicRegex.test(nameMain) || arabicRegex.test(nameAr)) && res.name_en) {
+            if (arabicRegex.test(nameMain) && !nameAr) {
+              // Arabic is in main, preserve it to [ar-ae]
+              translatedData[index]['Menu Item Name[ar-ae]'] = nameMain;
+            }
+            translatedData[index]['Menu Item Name'] = res.name_en;
           }
-          // Translate description: Arabic -> English, keep Arabic in [ar-ae]
-          if (arabicRegex.test(originalDesc) && res.desc_en) {
-             translatedData[index]['Description[ar-ae]'] = originalDesc;
-             translatedData[index]['Description'] = res.desc_en;
+
+          // Translate description
+          if ((arabicRegex.test(descMain) || arabicRegex.test(descAr)) && res.desc_en) {
+            if (arabicRegex.test(descMain) && !descAr) {
+              translatedData[index]['Description[ar-ae]'] = descMain;
+            }
+            translatedData[index]['Description'] = res.desc_en;
           }
-          // Translate brand name: Arabic -> English, keep Arabic in [ar-ae]
-          if (arabicRegex.test(originalBrandName) && res.brand_en) {
-             translatedData[index]['Brand Name[ar-ae]'] = originalBrandName;
-             translatedData[index]['Brand Name'] = res.brand_en;
+
+          // Translate brand name
+          if ((arabicRegex.test(brandMain) || arabicRegex.test(brandAr)) && res.brand_en) {
+            if (arabicRegex.test(brandMain) && !brandAr) {
+              translatedData[index]['Brand Name[ar-ae]'] = brandMain;
+            }
+            translatedData[index]['Brand Name'] = res.brand_en;
           }
-          // Translate modifier group: Arabic -> English, keep Arabic in [ar-ae]
-          if (arabicRegex.test(originalModGroup) && res.mod_group_en) {
-             translatedData[index]['Modifier Group Name[ar-ae]'] = originalModGroup;
-             translatedData[index]['Modifier Group Name'] = res.mod_group_en;
+
+          // Translate modifier group (supports both formats)
+          if ((arabicRegex.test(modGroupMain) || arabicRegex.test(modGroupAr)) && res.mod_group_en) {
+            if (arabicRegex.test(modGroupMain) && !modGroupAr) {
+              if (item['Modifier Group Name']) {
+                translatedData[index]['Modifier Group Name[ar-ae]'] = modGroupMain;
+              } else if (item['Modifier Group Template Name']) {
+                translatedData[index]['Modifier Group Template Name[ar-ae]'] = modGroupMain;
+              }
+            }
+            if (item['Modifier Group Name']) {
+              translatedData[index]['Modifier Group Name'] = res.mod_group_en;
+            } else if (item['Modifier Group Template Name']) {
+              translatedData[index]['Modifier Group Template Name'] = res.mod_group_en;
+            }
           }
-          // Translate modifier name: Arabic -> English, keep Arabic in [ar-ae]
-          if (arabicRegex.test(originalModName) && res.mod_name_en) {
-             translatedData[index]['Modifier Name[ar-ae]'] = originalModName;
-             translatedData[index]['Modifier Name'] = res.mod_name_en;
+
+          // Translate modifier name
+          if ((arabicRegex.test(modNameMain) || arabicRegex.test(modNameAr)) && res.mod_name_en) {
+            if (arabicRegex.test(modNameMain) && !modNameAr) {
+              translatedData[index]['Modifier Name[ar-ae]'] = modNameMain;
+            }
+            translatedData[index]['Modifier Name'] = res.mod_name_en;
           }
+
           totalTranslated++;
         }
       });
