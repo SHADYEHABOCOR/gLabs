@@ -180,6 +180,9 @@ export const transformMenuData = (
   // Track original columns from input data before normalization
   const originalColumns = Object.keys(rawData[0]);
 
+  // Track generated columns during transformation using a Set
+  const generatedColumns = new Set<string>();
+
   let currentItem: TransformedMenuItem | null = null;
 
   for (let i = 0; i < rawData.length; i++) {
@@ -196,15 +199,19 @@ export const transformMenuData = (
         // If it's a modifier or group, map it accordingly
         if (row['Modifier Group Name']) {
           currentItem['Modifier Group Name[ar-ae]'] = cleanVal;
+          generatedColumns.add('Modifier Group Name[ar-ae]');
         } else if (row['Modifier Name']) {
           currentItem['Modifier Name[ar-ae]'] = cleanVal;
+          generatedColumns.add('Modifier Name[ar-ae]');
         } else {
           currentItem['Menu Item Name[ar-ae]'] = cleanVal;
+          generatedColumns.add('Menu Item Name[ar-ae]');
         }
 
         const desc = row['Description'] || '';
         if (desc.toString().startsWith('[ar-ae]:')) {
           currentItem['Description[ar-ae]'] = desc.toString().replace('[ar-ae]:', '').trim();
+          generatedColumns.add('Description[ar-ae]');
         }
         arabicCount++;
       } else {
@@ -235,8 +242,10 @@ export const transformMenuData = (
       if (options.splitPrice && row['Price']) {
         const { currency, value } = parsePrice(row['Price'].toString());
         if (currency && value !== null) {
-          newItem[`Price[${currency}]`] = value;
+          const priceColumn = `Price[${currency}]`;
+          newItem[priceColumn] = value;
           currencies.add(currency);
+          generatedColumns.add(priceColumn);
         }
       }
 
@@ -245,6 +254,7 @@ export const transformMenuData = (
         const imageUrl = newItem['Image URL'].toString();
         if (imageUrl.includes('drive.google.com')) {
           newItem['Image URL'] = convertDriveLinkToDirectUrl(imageUrl);
+          generatedColumns.add('Image URL');
         }
       }
 
