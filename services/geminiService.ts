@@ -213,10 +213,11 @@ export const translateArabicToEnglish = async (
   const itemsToTranslate = data.filter(item => {
     const name = (item['Menu Item Name'] || '').toString();
     const desc = (item['Description'] || '').toString();
-    const mod = (item['Modifier Group Name'] || '').toString();
-    return arabicRegex.test(name) || arabicRegex.test(desc) || arabicRegex.test(mod);
+    const modGroup = (item['Modifier Group Name'] || '').toString();
+    const modName = (item['Modifier Name'] || '').toString();
+    return arabicRegex.test(name) || arabicRegex.test(desc) || arabicRegex.test(modGroup) || arabicRegex.test(modName);
   });
-  
+
   if (itemsToTranslate.length === 0) return { data, count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -231,21 +232,30 @@ export const translateArabicToEnglish = async (
   }
 
   const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
-    const translationList = batch.map(item => ({
-      id: item['Menu Item Id'],
-      name: item['Menu Item Name'],
-      description: item['Description'],
-      modifiers: item['Modifier Group Name']
-    }));
+    const translationList = batch.map(item => {
+      const name = (item['Menu Item Name'] || '').toString();
+      const desc = (item['Description'] || '').toString();
+      const modGroup = (item['Modifier Group Name'] || '').toString();
+      const modName = (item['Modifier Name'] || '').toString();
+
+      return {
+        id: item['Menu Item Id'],
+        // Only send Arabic fields for translation to English
+        name: arabicRegex.test(name) ? name : '',
+        description: arabicRegex.test(desc) ? desc : '',
+        modifierGroup: arabicRegex.test(modGroup) ? modGroup : '',
+        modifierName: arabicRegex.test(modName) ? modName : ''
+      };
+    });
 
     const prompt = `
       You are an expert Menu Translator.
       Translate the following Arabic menu items and modifiers into professional English.
-      If the source is already English, leave it. Correct any obvious spelling errors.
-      
+      If a field is empty, return empty string for that field.
+
       Return a JSON array:
-      [{ "id": "original_id", "name_en": "English Name", "desc_en": "English Description", "mod_en": "English Modifiers" }]
-      
+      [{ "id": "original_id", "name_en": "English Name", "desc_en": "English Description", "mod_group_en": "English Modifier Group", "mod_name_en": "English Modifier Name" }]
+
       Items:
       ${JSON.stringify(translationList)}
     `;
@@ -264,34 +274,44 @@ export const translateArabicToEnglish = async (
                 id: { type: Type.STRING },
                 name_en: { type: Type.STRING },
                 desc_en: { type: Type.STRING },
-                mod_en: { type: Type.STRING }
+                mod_group_en: { type: Type.STRING },
+                mod_name_en: { type: Type.STRING }
               },
-              required: ["id", "name_en", "desc_en", "mod_en"]
+              required: ["id", "name_en", "desc_en"]
             }
           }
         }
       });
 
       const results = JSON.parse(response.text || '[]');
-      
+
       results.forEach((res: any) => {
         const index = translatedData.findIndex(item => item['Menu Item Id'] === res.id);
         if (index !== -1) {
           const originalName = translatedData[index]['Menu Item Name'];
           const originalDesc = translatedData[index]['Description'];
-          const originalMod = translatedData[index]['Modifier Group Name'];
-          
-          if (arabicRegex.test(originalName)) {
+          const originalModGroup = translatedData[index]['Modifier Group Name'];
+          const originalModName = translatedData[index]['Modifier Name'];
+
+          // Translate name: Arabic -> English, keep Arabic in [ar-ae]
+          if (arabicRegex.test(originalName) && res.name_en) {
              translatedData[index]['Menu Item Name[ar-ae]'] = originalName;
              translatedData[index]['Menu Item Name'] = res.name_en;
           }
-          if (arabicRegex.test(originalDesc)) {
+          // Translate description: Arabic -> English, keep Arabic in [ar-ae]
+          if (arabicRegex.test(originalDesc) && res.desc_en) {
              translatedData[index]['Description[ar-ae]'] = originalDesc;
              translatedData[index]['Description'] = res.desc_en;
           }
-          if (arabicRegex.test(originalMod)) {
-             translatedData[index]['Modifier Group Name[ar-ae]'] = originalMod;
-             translatedData[index]['Modifier Group Name'] = res.mod_en;
+          // Translate modifier group: Arabic -> English, keep Arabic in [ar-ae]
+          if (arabicRegex.test(originalModGroup) && res.mod_group_en) {
+             translatedData[index]['Modifier Group Name[ar-ae]'] = originalModGroup;
+             translatedData[index]['Modifier Group Name'] = res.mod_group_en;
+          }
+          // Translate modifier name: Arabic -> English, keep Arabic in [ar-ae]
+          if (arabicRegex.test(originalModName) && res.mod_name_en) {
+             translatedData[index]['Modifier Name[ar-ae]'] = originalModName;
+             translatedData[index]['Modifier Name'] = res.mod_name_en;
           }
           totalTranslated++;
         }
