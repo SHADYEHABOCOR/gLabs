@@ -177,6 +177,9 @@ export const transformMenuData = (
     };
   }
 
+  // Track original columns from input data before normalization
+  const originalColumns = Object.keys(rawData[0]);
+
   let currentItem: TransformedMenuItem | null = null;
 
   for (let i = 0; i < rawData.length; i++) {
