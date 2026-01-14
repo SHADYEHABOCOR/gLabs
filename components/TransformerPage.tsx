@@ -300,7 +300,7 @@ const TransformerPage: React.FC = () => {
           setProcessingStatus('Smart Translation: Auto-detecting language...');
           setProcessingProgress({ current: 0, total: 0 });
           const res = await smartAutoTranslate(modifierData as any, (current, total) => {
-            setProcessingStatus(`Translating (${res.direction === 'ar-to-en' ? 'Arabic → English' : 'English → Arabic'})...`);
+            setProcessingStatus(`Smart Translating...`);
             setProcessingProgress(prev => ({
               current: Math.max(prev.current, current),
               total
@@ -406,7 +406,7 @@ const TransformerPage: React.FC = () => {
         setProcessingStatus('Smart Translation: Auto-detecting language...');
         setProcessingProgress({ current: 0, total: 0 });
         const res = await smartAutoTranslate(data, (current, total) => {
-          setProcessingStatus(`Translating (${res.direction === 'ar-to-en' ? 'Arabic → English' : 'English → Arabic'})...`);
+          setProcessingStatus(`Smart Translating...`);
           setProcessingProgress(prev => ({
             current: Math.max(prev.current, current),
             total
