@@ -46,6 +46,7 @@ export const translateMissingArabic = async (
   translatedData.forEach(item => {
     const name = (item['Menu Item Name'] || '').toString();
     const desc = (item['Description'] || '').toString();
+    const brandName = (item['Brand Name'] || '').toString();
     const modGroup = (item['Modifier Group Name'] || '').toString();
     const modName = (item['Modifier Name'] || '').toString();
 
@@ -56,6 +57,9 @@ export const translateMissingArabic = async (
     }
     if (desc && arabicRegex.test(desc) && !item['Description[ar-ae]']) {
       item['Description[ar-ae]'] = desc;
+    }
+    if (brandName && arabicRegex.test(brandName) && !item['Brand Name[ar-ae]']) {
+      item['Brand Name[ar-ae]'] = brandName;
     }
     if (modGroup && arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]']) {
       item['Modifier Group Name[ar-ae]'] = modGroup;
@@ -69,16 +73,18 @@ export const translateMissingArabic = async (
   const itemsToTranslate = translatedData.filter(item => {
     const name = (item['Menu Item Name'] || '').toString();
     const desc = (item['Description'] || '').toString();
+    const brandName = (item['Brand Name'] || '').toString();
     const modGroup = (item['Modifier Group Name'] || '').toString();
     const modName = (item['Modifier Name'] || '').toString();
 
     // Need translation if: source exists, is NOT Arabic, and Arabic column is empty
     const needsNameTranslation = name && !arabicRegex.test(name) && !item['Menu Item Name[ar-ae]'];
     const needsDescTranslation = desc && !arabicRegex.test(desc) && !item['Description[ar-ae]'];
+    const needsBrandTranslation = brandName && !arabicRegex.test(brandName) && !item['Brand Name[ar-ae]'];
     const needsModGroupTranslation = modGroup && !arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]'];
     const needsModNameTranslation = modName && !arabicRegex.test(modName) && !item['Modifier Name[ar-ae]'];
 
-    return needsNameTranslation || needsDescTranslation || needsModGroupTranslation || needsModNameTranslation;
+    return needsNameTranslation || needsDescTranslation || needsBrandTranslation || needsModGroupTranslation || needsModNameTranslation;
   });
 
   if (itemsToTranslate.length === 0) return { data: translatedData, count: alreadyArabicCount };
@@ -99,6 +105,7 @@ export const translateMissingArabic = async (
     const translationList = batch.map(item => {
       const name = (item['Menu Item Name'] || '').toString();
       const desc = (item['Description'] || '').toString();
+      const brandName = (item['Brand Name'] || '').toString();
       const modGroup = (item['Modifier Group Name'] || '').toString();
       const modName = (item['Modifier Name'] || '').toString();
 
@@ -107,6 +114,7 @@ export const translateMissingArabic = async (
         // Only send non-Arabic fields for translation
         name: (name && !arabicRegex.test(name)) ? name : '',
         description: (desc && !arabicRegex.test(desc)) ? desc : '',
+        brandName: (brandName && !arabicRegex.test(brandName)) ? brandName : '',
         modifierGroup: (modGroup && !arabicRegex.test(modGroup)) ? modGroup : '',
         modifierName: (modName && !arabicRegex.test(modName)) ? modName : ''
       };
@@ -137,7 +145,7 @@ export const translateMissingArabic = async (
       - For Alcohol sauces, translate based on flavor (e.g. "Rich Sauce").
 
       Return a JSON array:
-      [{ "id": "original_id", "name_ar": "Arabic Name or empty", "desc_ar": "Arabic Description or empty", "mod_group_ar": "Arabic Mod Group or empty", "mod_name_ar": "Arabic Mod Name or empty" }]
+      [{ "id": "original_id", "name_ar": "Arabic Name or empty", "desc_ar": "Arabic Description or empty", "brand_ar": "Arabic Brand Name or empty", "mod_group_ar": "Arabic Mod Group or empty", "mod_name_ar": "Arabic Mod Name or empty" }]
 
       Items:
       ${JSON.stringify(translationList)}
@@ -157,6 +165,7 @@ export const translateMissingArabic = async (
                 id: { type: Type.STRING },
                 name_ar: { type: Type.STRING },
                 desc_ar: { type: Type.STRING },
+                brand_ar: { type: Type.STRING },
                 mod_group_ar: { type: Type.STRING },
                 mod_name_ar: { type: Type.STRING }
               },
@@ -177,6 +186,9 @@ export const translateMissingArabic = async (
           }
           if (translatedData[index]['Description'] && res.desc_ar && !translatedData[index]['Description[ar-ae]']) {
             translatedData[index]['Description[ar-ae]'] = res.desc_ar;
+          }
+          if (translatedData[index]['Brand Name'] && res.brand_ar && !translatedData[index]['Brand Name[ar-ae]']) {
+            translatedData[index]['Brand Name[ar-ae]'] = res.brand_ar;
           }
           if (translatedData[index]['Modifier Group Name'] && res.mod_group_ar) {
             translatedData[index]['Modifier Group Name[ar-ae]'] = res.mod_group_ar;
@@ -213,9 +225,10 @@ export const translateArabicToEnglish = async (
   const itemsToTranslate = data.filter(item => {
     const name = (item['Menu Item Name'] || '').toString();
     const desc = (item['Description'] || '').toString();
+    const brandName = (item['Brand Name'] || '').toString();
     const modGroup = (item['Modifier Group Name'] || '').toString();
     const modName = (item['Modifier Name'] || '').toString();
-    return arabicRegex.test(name) || arabicRegex.test(desc) || arabicRegex.test(modGroup) || arabicRegex.test(modName);
+    return arabicRegex.test(name) || arabicRegex.test(desc) || arabicRegex.test(brandName) || arabicRegex.test(modGroup) || arabicRegex.test(modName);
   });
 
   if (itemsToTranslate.length === 0) return { data, count: 0 };
@@ -235,6 +248,7 @@ export const translateArabicToEnglish = async (
     const translationList = batch.map(item => {
       const name = (item['Menu Item Name'] || '').toString();
       const desc = (item['Description'] || '').toString();
+      const brandName = (item['Brand Name'] || '').toString();
       const modGroup = (item['Modifier Group Name'] || '').toString();
       const modName = (item['Modifier Name'] || '').toString();
 
@@ -243,6 +257,7 @@ export const translateArabicToEnglish = async (
         // Only send Arabic fields for translation to English
         name: arabicRegex.test(name) ? name : '',
         description: arabicRegex.test(desc) ? desc : '',
+        brandName: arabicRegex.test(brandName) ? brandName : '',
         modifierGroup: arabicRegex.test(modGroup) ? modGroup : '',
         modifierName: arabicRegex.test(modName) ? modName : ''
       };
@@ -254,7 +269,7 @@ export const translateArabicToEnglish = async (
       If a field is empty, return empty string for that field.
 
       Return a JSON array:
-      [{ "id": "original_id", "name_en": "English Name", "desc_en": "English Description", "mod_group_en": "English Modifier Group", "mod_name_en": "English Modifier Name" }]
+      [{ "id": "original_id", "name_en": "English Name", "desc_en": "English Description", "brand_en": "English Brand Name", "mod_group_en": "English Modifier Group", "mod_name_en": "English Modifier Name" }]
 
       Items:
       ${JSON.stringify(translationList)}
@@ -274,6 +289,7 @@ export const translateArabicToEnglish = async (
                 id: { type: Type.STRING },
                 name_en: { type: Type.STRING },
                 desc_en: { type: Type.STRING },
+                brand_en: { type: Type.STRING },
                 mod_group_en: { type: Type.STRING },
                 mod_name_en: { type: Type.STRING }
               },
@@ -290,6 +306,7 @@ export const translateArabicToEnglish = async (
         if (index !== -1) {
           const originalName = translatedData[index]['Menu Item Name'];
           const originalDesc = translatedData[index]['Description'];
+          const originalBrandName = translatedData[index]['Brand Name'];
           const originalModGroup = translatedData[index]['Modifier Group Name'];
           const originalModName = translatedData[index]['Modifier Name'];
 
@@ -302,6 +319,11 @@ export const translateArabicToEnglish = async (
           if (arabicRegex.test(originalDesc) && res.desc_en) {
              translatedData[index]['Description[ar-ae]'] = originalDesc;
              translatedData[index]['Description'] = res.desc_en;
+          }
+          // Translate brand name: Arabic -> English, keep Arabic in [ar-ae]
+          if (arabicRegex.test(originalBrandName) && res.brand_en) {
+             translatedData[index]['Brand Name[ar-ae]'] = originalBrandName;
+             translatedData[index]['Brand Name'] = res.brand_en;
           }
           // Translate modifier group: Arabic -> English, keep Arabic in [ar-ae]
           if (arabicRegex.test(originalModGroup) && res.mod_group_en) {
