@@ -132,6 +132,8 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
       // Check if names are in Arabic - if so, we'll clear them so Smart Translation can fill with English
       const groupNameIsArabic = hasArabicText(groupName);
       const modifierNameIsArabic = hasArabicText(modifierName);
+      const brandName = String(row['Brand Name'] || '');
+      const brandNameIsArabic = hasArabicText(brandName);
 
       // Copy ALL original columns from the row to preserve everything
       currentModifier = { ...row };
@@ -142,6 +144,14 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         if (groupNameIsArabic) {
           currentModifier['Modifier Group Template Name[ar-ae]'] = groupName;
           generatedColumns.add('Modifier Group Template Name[ar-ae]');
+        }
+      }
+
+      if (row['Brand Name']) {
+        currentModifier['Brand Name'] = brandNameIsArabic ? '' : brandName;
+        if (brandNameIsArabic) {
+          currentModifier['Brand Name[ar-ae]'] = brandName;
+          generatedColumns.add('Brand Name[ar-ae]');
         }
       }
 
