@@ -1,926 +1,426 @@
-# Grubtech Labs - Frontend Improvement Prompt
+# Grubtech Labs - Excel & Translation Bug Fixes
 
 ## Context
-This is a frontend-only React/TypeScript application for restaurant menu management with AI-powered translation and image processing. The app must remain **100% frontend** with no backend server required.
-
-## Core Principles
-1. **Keep it frontend-only** - All processing happens in browser
-2. **Maintain current features** - Don't remove existing functionality
-3. **Improve code quality** - Fix bugs, improve types, enhance UX
-4. **Harden security** - Address API key exposure and validation gaps
-5. **Optimize performance** - Reduce sequential operations, improve responsiveness
+This document addresses specific Excel processing and translation bugs that were identified and fixed during testing. The app is a frontend-only React/TypeScript menu management tool with AI-powered translation.
 
 ---
 
-## Priority 1: Critical Security Fixes (MUST FIX)
+## Issues Fixed in This Session
 
-### 🔴 API Key Exposure
-**Current Issue:**
-- `.env` file contains exposed API keys (Gemini, BrightData)
-- `vite.config.ts` (lines 14-15) bundles API keys into client code
-- Anyone with DevTools can extract and abuse keys
+### 1. Modifiers Re-Translating Arabic to Arabic
 
-**Required Fix:**
-1. Create `.env.example` template with placeholder values
-2. Add `.env` to `.gitignore` if not already
-3. Update `vite.config.ts` to only pass `VITE_` prefixed vars
-4. Document in README that API key will be visible to users (acceptable risk for internal tool)
-5. Add rate limiting checks in `geminiService.ts` to detect abuse
+**Problem:**
+When the "Translate to Arabic" toggle was enabled, modifier names that were already in Arabic were being sent to the AI translation API again, resulting in corrupted or redundant translations.
 
-**Implementation:**
+**Root Cause:**
+The `translateMissingArabic()` function in `services/geminiService.ts` didn't check if the source text was already Arabic before attempting translation.
+
+**Solution Applied:**
+Added a two-pass detection system:
+
+1. **First Pass**: Detect if source fields (`Menu Item Name`, `Brand Name`, `Modifier Group Name`, `Modifier Name`) contain Arabic characters using regex `/[\u0600-\u06FF]/`
+2. **Copy Directly**: If Arabic is detected, copy the Arabic text directly to the corresponding `[ar-ae]` column
+3. **Second Pass**: Filter out items that already have Arabic content before sending to the API
+
+**Files Changed:**
+- `services/geminiService.ts` (lines 45-120 in `translateMissingArabic`)
+
+**Code Snippet:**
 ```typescript
-// vite.config.ts - REMOVE API_KEY exposure
-define: {
-  'process.env.VITE_GEMINI_API_KEY': JSON.stringify(process.env.VITE_GEMINI_API_KEY),
-  // DO NOT expose non-VITE prefixed vars
-}
+// First pass: If source is already Arabic, copy to Arabic column and skip AI translation
+translatedData.forEach(item => {
+  const name = (item['Menu Item Name'] || '').toString();
+  const brandName = (item['Brand Name'] || '').toString();
+  const modGroup = (item['Modifier Group Name'] || '').toString();
+  const modName = (item['Modifier Name'] || '').toString();
 
-// geminiService.ts - Add rate limit detection
-const handleAPIError = (error: any) => {
-  if (error.status === 429) {
-    throw new Error('API rate limit exceeded. Please wait before retrying.');
+  if (name && arabicRegex.test(name) && !item['Menu Item Name[ar-ae]']) {
+    item['Menu Item Name[ar-ae]'] = name;
   }
-  throw error;
-};
-```
-
-### 🔴 Input Validation
-**Current Issue:**
-- No URL validation in `scraperService.ts`
-- Accepts any external URL for scraping
-- Users could be tricked into scraping malicious sites
-
-**Required Fix:**
-```typescript
-// services/scraperService.ts - Add domain whitelist
-const ALLOWED_DOMAINS = [
-  'grubtech.io',
-  'api.grubtech.io',
-  'api-gateway.grubtech.io',
-  'ubereats.com',
-  'deliveryhero.io'
-];
-
-export const validateMenuUrl = (url: string): boolean => {
-  try {
-    const urlObj = new URL(url);
-    return ALLOWED_DOMAINS.some(domain =>
-      urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
-    );
-  } catch {
-    return false;
+  if (brandName && arabicRegex.test(brandName) && !item['Brand Name[ar-ae]']) {
+    item['Brand Name[ar-ae]'] = brandName;
   }
-};
-
-// Use before any fetch
-export const scrapeMenuPreview = async (url: string): Promise<ScrapedItem[]> => {
-  if (!validateMenuUrl(url)) {
-    throw new Error('Invalid URL. Only Grubtech and UberEats URLs are allowed.');
+  if (modGroup && arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]']) {
+    item['Modifier Group Name[ar-ae]'] = modGroup;
   }
-  // ... rest of implementation
-};
-```
-
----
-
-## Priority 2: Error Handling (HIGH)
-
-### 🟠 Missing Error Boundaries
-**Current Issue:**
-- React errors crash entire app
-- No graceful degradation
-
-**Required Fix:**
-```typescript
-// components/ErrorBoundary.tsx - NEW FILE
-import React, { Component, ReactNode } from 'react';
-
-interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
-}
-
-interface State {
-  hasError: boolean;
-  error?: Error;
-}
-
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  if (modName && arabicRegex.test(modName) && !item['Modifier Name[ar-ae]']) {
+    item['Modifier Name[ar-ae]'] = modName;
   }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error boundary caught:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback || (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-          <div className="bg-white p-8 rounded-xl shadow-lg max-w-md">
-            <h2 className="text-xl font-bold text-red-600 mb-4">Something went wrong</h2>
-            <p className="text-slate-600 mb-4">{this.state.error?.message}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Reload Application
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// App.tsx - Wrap entire app
-<ErrorBoundary>
-  <MenuStudioApp onBack={handleBackToDashboard} />
-</ErrorBoundary>
-```
-
-### 🟠 Improve geminiService Error Handling
-**Current Issue:**
-- Batch failures don't propagate to UI
-- No retry logic for transient failures
-- Silent failures leave users confused
-
-**Required Fix:**
-```typescript
-// services/geminiService.ts - Enhanced error handling
-const processBatch = async (
-  batch: typeof itemsToTranslate,
-  batchIndex: number,
-  retryCount = 0
-): Promise<void> => {
-  const MAX_RETRIES = 3;
-
-  try {
-    // ... existing batch processing
-  } catch (error: any) {
-    console.error(`Batch ${batchIndex + 1} failed:`, error);
-
-    // Retry on transient errors
-    if (retryCount < MAX_RETRIES && (error.status === 429 || error.status >= 500)) {
-      const delayMs = Math.pow(2, retryCount) * 1000; // Exponential backoff
-      console.log(`Retrying batch ${batchIndex + 1} after ${delayMs}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      return processBatch(batch, batchIndex, retryCount + 1);
-    }
-
-    // Propagate error with context
-    throw new Error(
-      `Translation batch ${batchIndex + 1}/${batches.length} failed after ${retryCount} retries: ${error.message}`
-    );
-  }
-};
-```
-
-### 🟠 TransformerPage Error Handling
-**Current Issue:**
-- `runTransformation()` has no try-catch
-- Errors leave UI in inconsistent state
-
-**Required Fix:**
-```typescript
-// components/TransformerPage.tsx - Wrap in try-catch
-const runTransformation = async (options: TransformOptions) => {
-  setIsProcessing(true);
-  setAiInsights(null);
-  setError(null);
-  setProcessingStatus('Analyzing headers...');
-
-  try {
-    // ... existing transformation logic
-  } catch (err: any) {
-    console.error('Transformation failed:', err);
-    setError(err.message || 'An unexpected error occurred during transformation.');
-  } finally {
-    setIsProcessing(false);
-    setProcessingStatus('');
-    setProcessingProgress({ current: 0, total: 0 });
-  }
-};
-```
-
----
-
-## Priority 3: Type Safety (HIGH)
-
-### 🟠 Fix Loose Typing
-**Current Issue:**
-- `any[]` used instead of proper types
-- Missing type guards
-- Incomplete interfaces
-
-**Required Fix:**
-```typescript
-// types.ts - Enhanced types
-export interface TransformedMenuItem {
-  'Menu Item Id': string;
-  'Menu Item Name'?: string | null;
-  'Menu Item Name[ar-ae]'?: string | null;
-  'Description'?: string | null;
-  'Description[ar-ae]'?: string | null;
-  'Brand Name'?: string | null;
-  'Brand Name[ar-ae]'?: string | null;
-  'Modifier Group Name'?: string | null;
-  'Modifier Group Name[ar-ae]'?: string | null;
-  'Modifier Name'?: string | null;
-  'Modifier Name[ar-ae]'?: string | null;
-  // ... all other fields with explicit types
-  _imageSource?: 'database' | 'generated' | 'excel' | 'none';
-}
-
-// Type guard
-export const isTransformedMenuItem = (item: any): item is TransformedMenuItem => {
-  return item && typeof item === 'object' && 'Menu Item Id' in item;
-};
-
-// components/TransformerPage.tsx - Use proper types
-const [transformedData, setTransformedData] = useState<TransformedMenuItem[] | null>(null);
-
-// Replace all `any[]` with `TransformedMenuItem[]`
-```
-
-### 🟠 Add JSDoc Comments
-**Required Fix:**
-```typescript
-// services/geminiService.ts - Document all exports
-/**
- * Translates English menu fields to Arabic using Google Gemini AI.
- * Automatically detects already-Arabic content and skips re-translation.
- *
- * @param data - Array of menu items to translate
- * @param onProgress - Optional callback for progress updates (current, total)
- * @returns Promise resolving to translated data and count of items translated
- * @throws Error if API key is missing or API request fails
- */
-export const translateMissingArabic = async (
-  data: TransformedMenuItem[],
-  onProgress?: (current: number, total: number) => void
-): Promise<{ data: TransformedMenuItem[], count: number }> => {
-  // ...
-};
-```
-
----
-
-## Priority 4: Performance Optimization (MEDIUM)
-
-### 🟡 Parallel Image Downloads
-**Current Issue:**
-- Images downloaded sequentially in `TransformerPage.tsx`
-- 100 images = 100 sequential requests (very slow)
-
-**Required Fix:**
-```typescript
-// components/TransformerPage.tsx - Concurrent downloads with limit
-const CONCURRENT_DOWNLOADS = 5;
-
-const downloadImagesWithConcurrency = async (
-  items: TransformedMenuItem[],
-  onProgress: (current: number, total: number) => void
-): Promise<void> => {
-  const itemsWithImages = items.filter(item => item['Image URL']);
-  const total = itemsWithImages.length;
-  let completed = 0;
-
-  // Process in chunks
-  for (let i = 0; i < itemsWithImages.length; i += CONCURRENT_DOWNLOADS) {
-    const chunk = itemsWithImages.slice(i, i + CONCURRENT_DOWNLOADS);
-
-    await Promise.all(
-      chunk.map(async (item) => {
-        try {
-          const imageUrl = item['Image URL'];
-          const response = await fetch(imageUrl);
-          const blob = await response.blob();
-          // ... process blob
-          completed++;
-          onProgress(completed, total);
-        } catch (error) {
-          console.error(`Failed to download image for ${item['Menu Item Name']}:`, error);
-          completed++;
-          onProgress(completed, total);
-        }
-      })
-    );
-  }
-};
-```
-
-### 🟡 Debounce DB Updates
-**Current Issue:**
-- `MenuStudioApp.tsx` updates count on every db-updated event
-- No debouncing causes excessive re-renders
-
-**Required Fix:**
-```typescript
-// components/MenuStudioApp.tsx - Add debounce
-import { useEffect, useRef } from 'react';
-
-const MenuStudioApp: React.FC<MenuStudioAppProps> = ({ onBack }) => {
-  const updateTimeoutRef = useRef<NodeJS.Timeout>();
-
-  useEffect(() => {
-    const handleDBUpdate = () => {
-      // Clear existing timeout
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-
-      // Debounce for 300ms
-      updateTimeoutRef.current = setTimeout(() => {
-        updateCount();
-      }, 300);
-    };
-
-    window.addEventListener('db-updated', handleDBUpdate);
-    return () => {
-      window.removeEventListener('db-updated', handleDBUpdate);
-      if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
-    };
-  }, []);
-
-  // ...
-};
-```
-
-### 🟡 Cache IndexedDB Handle
-**Current Issue:**
-- `getLocalDB()` called repeatedly for every operation
-- Opening DB connection is expensive
-
-**Required Fix:**
-```typescript
-// services/imageService.ts - Cache DB handle
-let cachedDB: IDBDatabase | null = null;
-let dbInitPromise: Promise<IDBDatabase> | null = null;
-
-export const getLocalDB = async (): Promise<IDBDatabase> => {
-  // Return cached DB if already open
-  if (cachedDB && cachedDB.objectStoreNames.length > 0) {
-    return cachedDB;
-  }
-
-  // Return existing initialization promise if in progress
-  if (dbInitPromise) {
-    return dbInitPromise;
-  }
-
-  // Start new initialization
-  dbInitPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-      dbInitPromise = null;
-      reject(request.error);
-    };
-
-    request.onsuccess = () => {
-      cachedDB = request.result;
-      dbInitPromise = null;
-      resolve(cachedDB);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'key' });
-      }
-    };
-  });
-
-  return dbInitPromise;
-};
-
-// Add cleanup function
-export const closeDB = () => {
-  if (cachedDB) {
-    cachedDB.close();
-    cachedDB = null;
-  }
-};
-```
-
----
-
-## Priority 5: Code Organization (MEDIUM)
-
-### 🟡 Extract Constants
-**Current Issue:**
-- Magic numbers scattered throughout codebase
-
-**Required Fix:**
-```typescript
-// constants/index.ts - NEW FILE
-export const AI_CONFIG = {
-  BATCH_SIZE: 25,
-  CONCURRENCY: 3,
-  MAX_RETRIES: 3,
-  MODELS: {
-    TRANSLATION: 'gemini-3-flash-preview',
-    IMAGE_GENERATION: 'gemini-2.5-flash-image'
-  }
-} as const;
-
-export const IMAGE_CONFIG = {
-  CONCURRENT_DOWNLOADS: 5,
-  MAX_SIZE_MB: 10,
-  CHUNK_SIZE: 500,
-  SUPPORTED_FORMATS: ['jpg', 'jpeg', 'png', 'webp'] as const
-} as const;
-
-export const SCRAPER_CONFIG = {
-  TIMEOUT_MS: 10000,
-  ALLOWED_DOMAINS: [
-    'grubtech.io',
-    'api.grubtech.io',
-    'api-gateway.grubtech.io',
-    'ubereats.com',
-    'deliveryhero.io'
-  ] as const
-} as const;
-
-// Use throughout codebase
-import { AI_CONFIG } from '../constants';
-const batchSize = AI_CONFIG.BATCH_SIZE;
-```
-
-### 🟡 Split TransformerPage Component
-**Current Issue:**
-- 925 lines in single file
-- Hard to maintain and test
-
-**Required Fix:**
-```typescript
-// components/TransformerPage/index.tsx - Main orchestrator
-// components/TransformerPage/ConfigPanel.tsx - Configuration options
-// components/TransformerPage/DataPreview.tsx - Data table
-// components/TransformerPage/SyncModal.tsx - Image sync approval
-// components/TransformerPage/hooks/useTransformation.ts - Business logic hook
-// components/TransformerPage/types.ts - Component-specific types
-
-// Example hook extraction:
-// hooks/useTransformation.ts
-export const useTransformation = () => {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [transformedData, setTransformedData] = useState<TransformedMenuItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const runTransformation = useCallback(async (options: TransformOptions) => {
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      // ... transformation logic
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, []);
-
-  return {
-    isProcessing,
-    transformedData,
-    error,
-    runTransformation
-  };
-};
-```
-
----
-
-## Priority 6: UX Improvements (MEDIUM)
-
-### 🟡 Better Loading States
-**Current Issue:**
-- Long operations lack detailed progress feedback
-- Users don't know what's happening
-
-**Required Fix:**
-```typescript
-// components/TransformerPage.tsx - Enhanced progress UI
-<div className="space-y-2">
-  <div className="flex justify-between text-sm">
-    <span className="text-slate-600">{processingStatus}</span>
-    <span className="font-medium text-slate-900">
-      {processingProgress.total > 0 && (
-        `${Math.round((processingProgress.current / processingProgress.total) * 100)}%`
-      )}
-    </span>
-  </div>
-  <div className="w-full bg-slate-200 rounded-full h-2">
-    <div
-      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-      style={{
-        width: `${(processingProgress.current / processingProgress.total) * 100}%`
-      }}
-    />
-  </div>
-  {processingProgress.total > 0 && (
-    <p className="text-xs text-slate-500">
-      Processing item {processingProgress.current} of {processingProgress.total}
-    </p>
-  )}
-</div>
-```
-
-### 🟡 Add Keyboard Shortcuts
-**Required Fix:**
-```typescript
-// components/MenuStudioApp.tsx - Add keyboard navigation
-useEffect(() => {
-  const handleKeyPress = (e: KeyboardEvent) => {
-    // Ctrl/Cmd + S to export
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      if (transformedData) downloadExcel();
-    }
-
-    // Escape to close modals
-    if (e.key === 'Escape') {
-      setShowSyncModal(false);
-    }
-  };
-
-  window.addEventListener('keydown', handleKeyPress);
-  return () => window.removeEventListener('keydown', handleKeyPress);
-}, [transformedData]);
-```
-
-### 🟡 Improve Accessibility
-**Required Fix:**
-```typescript
-// components/TransformerPage.tsx - Add ARIA labels
-<button
-  onClick={runTransformation}
-  disabled={isProcessing}
-  aria-label="Start menu transformation"
-  aria-busy={isProcessing}
-  className="..."
->
-  {isProcessing ? 'Processing...' : 'Transform Data'}
-</button>
-
-// Add focus management for modals
-const modalRef = useRef<HTMLDivElement>(null);
-
-useEffect(() => {
-  if (showSyncModal && modalRef.current) {
-    const firstFocusable = modalRef.current.querySelector('button, input, select');
-    if (firstFocusable instanceof HTMLElement) {
-      firstFocusable.focus();
-    }
-  }
-}, [showSyncModal]);
-```
-
----
-
-## Priority 7: Data Validation (MEDIUM)
-
-### 🟡 Validate Excel Structure
-**Required Fix:**
-```typescript
-// services/excelService.ts - Add validation
-export const validateExcelStructure = (data: any[]): { valid: boolean; errors: string[] } => {
-  const errors: string[] = [];
-
-  if (!Array.isArray(data) || data.length === 0) {
-    errors.push('File is empty or invalid format');
-    return { valid: false, errors };
-  }
-
-  const firstRow = data[0];
-  const recognizedColumns = Object.keys(firstRow).filter(key =>
-    columnMappings[key.toLowerCase().trim()]
-  );
-
-  if (recognizedColumns.length === 0) {
-    errors.push('No recognized column headers found. Expected columns: Menu Item Name, Description, Price, etc.');
-  }
-
-  if (!recognizedColumns.some(col =>
-    ['name', 'item name', 'menu item name', 'title'].includes(col.toLowerCase())
-  )) {
-    errors.push('Missing required column: Menu Item Name');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  };
-};
-
-// Use in TransformerPage
-const handleFileUpload = async (file: File) => {
-  const data = await readExcelFile(file);
-  const validation = validateExcelStructure(data);
-
-  if (!validation.valid) {
-    setError(validation.errors.join('\n'));
-    return;
-  }
-
-  // Proceed with transformation
-};
-```
-
-### 🟡 Sanitize User Input
-**Required Fix:**
-```typescript
-// utils/sanitize.ts - NEW FILE
-export const sanitizeString = (input: string, maxLength = 1000): string => {
-  if (!input) return '';
-
-  // Remove control characters except newlines and tabs
-  let sanitized = input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-
-  // Limit length
-  if (sanitized.length > maxLength) {
-    sanitized = sanitized.substring(0, maxLength);
-  }
-
-  return sanitized.trim();
-};
-
-export const sanitizeUrl = (url: string): string => {
-  try {
-    const urlObj = new URL(url);
-    // Only allow http and https
-    if (!['http:', 'https:'].includes(urlObj.protocol)) {
-      throw new Error('Invalid protocol');
-    }
-    return urlObj.toString();
-  } catch {
-    throw new Error('Invalid URL format');
-  }
-};
-
-// Use in excelService
-const newItem: TransformedMenuItem = {
-  'Menu Item Name': sanitizeString(row['Menu Item Name'], 200),
-  'Description': sanitizeString(row['Description'], 1000),
-  // ...
-};
-```
-
----
-
-## Priority 8: Bug Fixes (LOW-MEDIUM)
-
-### 🟡 Fix Arabic Regex
-**Current Issue:**
-- Too broad, matches single Arabic characters
-- Could match Arabic numerals unintentionally
-
-**Required Fix:**
-```typescript
-// services/geminiService.ts - Improved regex
-const arabicRegex = /[\u0600-\u06FF]{2,}/; // Require at least 2 Arabic chars
-
-// Or more strict:
-const hasSignificantArabic = (text: string): boolean => {
-  const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
-  const totalChars = text.replace(/\s/g, '').length;
-  return arabicChars > 0 && (arabicChars / totalChars) > 0.3; // 30% threshold
-};
-```
-
-### 🟡 Fix Image Sanitization
-**Current Issue:**
-- `sanitizeFileName()` creates different keys for similar names
-- "Item Name" vs "ItemName" become different
-
-**Required Fix:**
-```typescript
-// services/imageService.ts - Consistent sanitization
-export const sanitizeFileName = (name: string): string => {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]/g, '_') // Replace ALL non-alphanumeric with underscore
-    .replace(/_+/g, '_') // Collapse multiple underscores
-    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
-};
-
-export const getDBKey = (itemId: string, itemName: string): string => {
-  const sanitizedName = sanitizeFileName(itemName);
-  return `img_${itemId}_${sanitizedName}`;
-};
-```
-
-### 🟡 Fix Price Parsing
-**Current Issue:**
-- Doesn't handle thousand separators
-- Fails silently on invalid formats
-
-**Required Fix:**
-```typescript
-// services/excelService.ts - Robust price parsing
-const parsePrice = (priceStr: string): { currency: string | null; value: number | null } => {
-  if (!priceStr) return { currency: null, value: null };
-
-  const str = priceStr.toString().trim();
-
-  // Remove thousand separators (comma, space, apostrophe)
-  const cleaned = str.replace(/[,\s']/g, '');
-
-  // Match currency code (3 letters) and number
-  const match = cleaned.match(/^([A-Z]{3})\s*([\d.]+)$|^([\d.]+)\s*([A-Z]{3})$/i);
-
-  if (!match) {
-    console.warn(`Could not parse price: "${priceStr}"`);
-    return { currency: null, value: null };
-  }
-
-  const currency = (match[1] || match[4] || '').toUpperCase();
-  const valueStr = match[2] || match[3];
-  const value = parseFloat(valueStr);
-
-  if (isNaN(value) || value < 0) {
-    console.warn(`Invalid price value: "${priceStr}"`);
-    return { currency: null, value: null };
-  }
-
-  return { currency, value };
-};
-```
-
-### 🟡 Make Menu Item IDs Globally Unique
-**Required Fix:**
-```typescript
-// services/excelService.ts - UUID-based IDs
-import { v4 as uuidv4 } from 'uuid'; // Add uuid package
-
-if (!newItem['Menu Item Id']) {
-  newItem['Menu Item Id'] = `auto-${uuidv4()}`; // Globally unique
-}
-```
-
----
-
-## Priority 9: Testing Infrastructure (LOW)
-
-### 🟢 Add Basic Tests
-**Required Setup:**
-```bash
-npm install --save-dev vitest @testing-library/react @testing-library/jest-dom
-```
-
-**Required Fix:**
-```typescript
-// services/__tests__/excelService.test.ts - NEW FILE
-import { describe, it, expect } from 'vitest';
-import { parsePrice, sanitizeFileName } from '../imageService';
-
-describe('excelService', () => {
-  describe('parsePrice', () => {
-    it('parses standard format', () => {
-      expect(parsePrice('AED 25.50')).toEqual({ currency: 'AED', value: 25.50 });
-    });
-
-    it('handles thousand separators', () => {
-      expect(parsePrice('SAR 1,234.56')).toEqual({ currency: 'SAR', value: 1234.56 });
-    });
-
-    it('returns null for invalid input', () => {
-      expect(parsePrice('invalid')).toEqual({ currency: null, value: null });
-    });
-  });
 });
 
-// vitest.config.ts - NEW FILE
-import { defineConfig } from 'vitest/config';
+// Second pass: Only translate items that don't already have Arabic
+const itemsToTranslate = translatedData.filter(item => {
+  const name = (item['Menu Item Name'] || '').toString();
+  const brandName = (item['Brand Name'] || '').toString();
+  const modGroup = (item['Modifier Group Name'] || '').toString();
+  const modName = (item['Modifier Name'] || '').toString();
 
-export default defineConfig({
-  test: {
-    environment: 'jsdom',
-    globals: true
-  }
+  const nameNeedsTranslation = name && !arabicRegex.test(name) && !item['Menu Item Name[ar-ae]'];
+  const brandNeedsTranslation = brandName && !arabicRegex.test(brandName) && !item['Brand Name[ar-ae]'];
+  const modGroupNeedsTranslation = modGroup && !arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]'];
+  const modNameNeedsTranslation = modName && !arabicRegex.test(modName) && !item['Modifier Name[ar-ae]'];
+
+  return nameNeedsTranslation || brandNeedsTranslation || modGroupNeedsTranslation || modNameNeedsTranslation;
 });
 ```
 
+**Testing:**
+- Upload an Excel with Arabic modifier names
+- Enable "Translate to Arabic" toggle
+- Verify Arabic text is preserved without re-translation
+
 ---
 
-## Priority 10: Documentation
+### 2. Missing Bidirectional Translation
 
-### 🟢 Add Inline Code Comments
-**Required Fix:**
-- Add JSDoc to all exported functions
-- Document complex algorithms
-- Explain non-obvious business logic
+**Problem:**
+The "Arabic to English" toggle only worked for menu item names, not for brand names or modifiers. Users needed to translate Arabic menus to English but brand and modifier translations were skipped.
 
-### 🟢 Create FAQ Document
-```markdown
-# FAQ.md - NEW FILE
+**Solution Applied:**
+Updated `translateArabicToEnglish()` function to:
+1. Detect Arabic in `Brand Name`, `Modifier Group Name`, and `Modifier Name` fields
+2. Translate them to English
+3. Preserve the original Arabic in `[ar-ae]` columns
 
-## Common Issues
+**Files Changed:**
+- `services/geminiService.ts` (lines 165-340 in `translateArabicToEnglish`)
 
-### Q: Translation fails with "API rate limit exceeded"
-**A:** Google Gemini has usage limits. Wait 1 minute and try again with smaller batch sizes.
+**Code Snippet:**
+```typescript
+// Check if any field has Arabic content
+translatedData.forEach(item => {
+  const name = (item['Menu Item Name'] || '').toString();
+  const brandName = (item['Brand Name'] || '').toString();
+  const modGroup = (item['Modifier Group Name'] || '').toString();
+  const modName = (item['Modifier Name'] || '').toString();
 
-### Q: Images not appearing in ZIP download
-**A:** Ensure images are accessible URLs. Check browser console for CORS errors.
+  if (name && arabicRegex.test(name)) {
+    item['Menu Item Name[ar-ae]'] = name; // Preserve original
+  }
+  if (brandName && arabicRegex.test(brandName)) {
+    item['Brand Name[ar-ae]'] = brandName;
+  }
+  if (modGroup && arabicRegex.test(modGroup)) {
+    item['Modifier Group Name[ar-ae]'] = modGroup;
+  }
+  if (modName && arabicRegex.test(modName)) {
+    item['Modifier Name[ar-ae]'] = modName;
+  }
+});
 
-### Q: Arabic text appears as boxes
-**A:** Install Arabic fonts on your system. App uses system fonts for rendering.
+// Only translate items with Arabic content
+const itemsToTranslate = translatedData.filter(item => {
+  const name = (item['Menu Item Name'] || '').toString();
+  const brandName = (item['Brand Name'] || '').toString();
+  const modGroup = (item['Modifier Group Name'] || '').toString();
+  const modName = (item['Modifier Name'] || '').toString();
 
-### Q: Modifier Mode doesn't translate
-**A:** Check that both Modifier Mode AND translation toggles are enabled.
+  return arabicRegex.test(name) || arabicRegex.test(brandName) ||
+         arabicRegex.test(modGroup) || arabicRegex.test(modName);
+});
+```
 
-## Best Practices
+**Testing:**
+- Upload an Excel with Arabic brand names and modifier names
+- Enable "Arabic to English" toggle
+- Verify all fields translate to English with Arabic preserved in `[ar-ae]` columns
 
-1. **Before translating large datasets**: Test with 10-20 items first
-2. **When scraping images**: Start with single menu, then batch
-3. **For modifier groups**: Use dedicated Modifier Mode, not standard transformation
+---
 
-## Performance Tips
+### 3. Empty Columns Deleted from Output
 
-- Keep translations under 500 items per batch
-- Close other browser tabs when processing images
-- Clear IndexedDB if it exceeds 50MB (Settings > Storage)
+**Problem:**
+When exporting transformed data to Excel, any column that was completely empty across all rows was being removed from the output file. This caused confusion when users had specific column templates they needed to maintain.
+
+**Root Cause:**
+The `downloadExcel()` function in `services/excelService.ts` filtered out columns with no data using `columnsWithData` Set.
+
+**Solution Applied:**
+Removed the filter logic and kept all columns in the predefined order, regardless of whether they contain data.
+
+**Files Changed:**
+- `services/excelService.ts` (line 280)
+
+**Code Change:**
+```typescript
+// BEFORE (removed empty columns):
+const activeColumns = finalOrder.filter(col => columnsWithData.has(col));
+
+// AFTER (keep all columns):
+const activeColumns = finalOrder;
+```
+
+**Testing:**
+- Transform data that doesn't have values for certain columns (e.g., no Allergen data)
+- Export to Excel
+- Verify empty columns still appear in the output file
+
+---
+
+### 4. Modifier Mode Missing Translation Support
+
+**Problem:**
+When "Modifier Mode" toggle was enabled (for Modifier Group Template exports), the translation toggles ("Translate to Arabic" and "Arabic to English") had no effect. The data was transformed but not translated.
+
+**Root Cause:**
+The transformation logic in `components/TransformerPage.tsx` had an early return after applying modifier formatting, skipping the translation calls that came later in the function.
+
+**Solution Applied:**
+Moved translation logic inside the `if (options.modifiersFormatting)` block, so translations are applied to modifier data before setting the final output.
+
+**Files Changed:**
+- `components/TransformerPage.tsx` (lines 268-324)
+
+**Code Snippet:**
+```typescript
+if (options.modifiersFormatting) {
+  let modifierData = transformModifierData(rawData);
+
+  // Apply Arabic to English translation if enabled
+  if (options.autoTranslateArToEn) {
+    setProcessingStatus('Translating Arabic to English...');
+    const result = await translateArabicToEnglish(
+      modifierData as any,
+      (current, total) => {
+        setProcessingProgress({ current, total });
+      }
+    );
+    modifierData = result.data as any;
+  }
+
+  // Apply English to Arabic translation if enabled
+  if (options.autoTranslate) {
+    setProcessingStatus('Translating to Arabic...');
+    const result = await translateMissingArabic(
+      modifierData as any,
+      (current, total) => {
+        setProcessingProgress({ current, total });
+      }
+    );
+    modifierData = result.data as any;
+  }
+
+  setTransformedData(modifierData as any);
+  setAiInsights({
+    message: `Successfully transformed ${modifierData.length} modifier rows with flattened format.`,
+    rowsProcessed: modifierData.length,
+    emptyColumnsRemoved: 0,
+  });
+  setIsProcessing(false);
+  return;
+}
+```
+
+**Testing:**
+- Upload a Modifier Group Template export
+- Enable "Modifier Mode" toggle
+- Enable either translation toggle ("Translate to Arabic" or "Arabic to English")
+- Verify translations work correctly for modifier data
+
+---
+
+### 5. Brand Name Not Translating
+
+**Problem:**
+When translating menu data, the `Brand Name` field was being skipped. English brand names stayed in English even with "Translate to Arabic" enabled, and Arabic brand names weren't translated to English.
+
+**Root Cause:**
+The translation functions didn't include `Brand Name` in their field lists. The AI prompt, response schema, and result processing all omitted the brand field.
+
+**Solution Applied:**
+Added `Brand Name` handling to both translation directions:
+
+1. Updated detection logic to check for Arabic in `Brand Name`
+2. Added `brand_name` to AI prompts and schemas
+3. Added result processing to map `brand_ar`/`brand_en` back to data
+
+**Files Changed:**
+- `services/geminiService.ts` (multiple locations in both translation functions)
+
+**Code Changes:**
+
+**English to Arabic (`translateMissingArabic`):**
+```typescript
+// Detection
+const brandName = (item['Brand Name'] || '').toString();
+if (brandName && arabicRegex.test(brandName) && !item['Brand Name[ar-ae]']) {
+  item['Brand Name[ar-ae]'] = brandName;
+}
+
+// Filter for translation
+const brandNeedsTranslation = brandName && !arabicRegex.test(brandName) && !item['Brand Name[ar-ae]'];
+
+// Schema
+brand_ar: z.string().optional().describe('Arabic translation of brand_name'),
+
+// Result processing
+if (translatedItem.brand_ar) {
+  item['Brand Name[ar-ae]'] = translatedItem.brand_ar;
+}
+```
+
+**Arabic to English (`translateArabicToEnglish`):**
+```typescript
+// Detection
+const brandName = (item['Brand Name'] || '').toString();
+if (brandName && arabicRegex.test(brandName)) {
+  item['Brand Name[ar-ae]'] = brandName;
+}
+
+// Filter for translation
+arabicRegex.test(brandName)
+
+// Schema
+brand_en: z.string().optional().describe('English translation of brand_name'),
+
+// Result processing
+if (translatedItem.brand_en) {
+  item['Brand Name'] = translatedItem.brand_en;
+}
+```
+
+**Testing:**
+- Upload Excel with Brand Name column containing English names
+- Enable "Translate to Arabic"
+- Verify Brand Name translates and `Brand Name[ar-ae]` is populated
+- Upload Excel with Arabic brand names
+- Enable "Arabic to English"
+- Verify Brand Name translates to English with Arabic preserved in `Brand Name[ar-ae]`
+
+---
+
+## How to Test All Fixes
+
+### Test Case 1: Arabic Modifiers Don't Re-Translate
+1. Create Excel with modifier rows containing Arabic text in "Modifier Name"
+2. Upload file to Menu Studio Pro
+3. Enable "Translate to Arabic" toggle
+4. Click "Transform Data"
+5. **Expected**: Arabic text is copied to `Modifier Name[ar-ae]` without API calls
+6. **Check**: Console should show fewer items sent to translation API
+
+### Test Case 2: Bidirectional Translation Works
+1. Create Excel with:
+   - English: Brand Name, Modifier Group Name, Modifier Name
+   - Arabic: Brand Name, Modifier Group Name, Modifier Name
+2. Test English → Arabic:
+   - Upload English file
+   - Enable "Translate to Arabic"
+   - Verify all fields translate
+3. Test Arabic → English:
+   - Upload Arabic file
+   - Enable "Arabic to English"
+   - Verify all fields translate with Arabic preserved
+
+### Test Case 3: Empty Columns Preserved
+1. Create Excel with only: Menu Item Name, Description, Price[AED]
+2. Upload and transform (no modifiers, no allergens, no routing labels)
+3. Export to Excel
+4. Open exported file
+5. **Expected**: All predefined columns appear (even empty ones)
+
+### Test Case 4: Modifier Mode Translations
+1. Export Modifier Group Template from Grubtech
+2. Upload to Menu Studio Pro
+3. Enable "Modifier Mode" toggle
+4. Enable "Translate to Arabic" toggle
+5. Click "Transform Data"
+6. **Expected**: Modifier names translate and Arabic columns populate
+
+### Test Case 5: Brand Name Translates
+1. Create Excel with Brand Name column: "McDonald's", "Starbucks", "KFC"
+2. Enable "Translate to Arabic"
+3. Transform and verify Brand Name[ar-ae] contains Arabic
+4. Create Excel with Brand Name column: "ماكدونالدز", "ستاربكس", "كنتاكي"
+5. Enable "Arabic to English"
+6. Transform and verify Brand Name contains English
+
+---
+
+## Remaining Recommendations (Optional)
+
+While the critical bugs are fixed, here are optional improvements for future iterations:
+
+### 1. Improve Arabic Detection Accuracy
+The current regex `/[\u0600-\u06FF]/` detects any Arabic character. Consider requiring at least 2 consecutive Arabic characters to avoid false positives:
+
+```typescript
+const arabicRegex = /[\u0600-\u06FF]{2,}/;
+```
+
+### 2. Add User Feedback for Skipped Items
+When items are skipped because they're already Arabic, show a message:
+
+```typescript
+const skippedCount = translatedData.length - itemsToTranslate.length;
+if (skippedCount > 0) {
+  console.log(`Skipped ${skippedCount} items that were already in Arabic`);
+}
+```
+
+### 3. Add Validation to Excel Upload
+Before processing, validate that required columns exist:
+
+```typescript
+const requiredColumns = ['Menu Item Name'];
+const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+if (missingColumns.length > 0) {
+  setError(`Missing required columns: ${missingColumns.join(', ')}`);
+  return;
+}
+```
+
+### 4. Add Progress Indicators for Translation
+Show which batch is being translated:
+
+```typescript
+setProcessingStatus(`Translating batch ${batchIndex + 1} of ${batches.length}...`);
 ```
 
 ---
 
-## Implementation Checklist
+## Technical Details
 
-### Phase 1: Security & Critical Bugs (Week 1)
-- [ ] Remove API keys from `.env`, create `.env.example`
-- [ ] Fix `vite.config.ts` to not expose sensitive vars
-- [ ] Add URL validation to scraperService
-- [ ] Implement Error Boundary component
-- [ ] Add try-catch to all async operations
-- [ ] Fix Arabic regex to require 2+ characters
-- [ ] Fix image sanitization consistency
+### Files Modified
+1. **services/geminiService.ts** - Translation logic with Arabic detection
+2. **services/excelService.ts** - Column preservation fix
+3. **components/TransformerPage.tsx** - Modifier mode translation integration
 
-### Phase 2: Type Safety & Code Quality (Week 2)
-- [ ] Replace all `any` with proper types
-- [ ] Add JSDoc comments to all exports
-- [ ] Extract magic numbers to constants
-- [ ] Split TransformerPage into sub-components
-- [ ] Add type guards for data validation
-- [ ] Implement `validateExcelStructure()`
+### Key Functions Changed
+- `translateMissingArabic()` - Added Brand Name, fixed Arabic detection
+- `translateArabicToEnglish()` - Added Brand Name, fixed Arabic detection
+- `downloadExcel()` - Removed empty column filtering
+- `runTransformation()` in TransformerPage - Added modifier translation support
 
-### Phase 3: Performance & UX (Week 3)
-- [ ] Implement parallel image downloads
-- [ ] Add debouncing to DB update listener
-- [ ] Cache IndexedDB handle
-- [ ] Improve progress indicators
-- [ ] Add keyboard shortcuts
-- [ ] Enhance accessibility (ARIA labels, focus management)
-
-### Phase 4: Polish & Testing (Week 4)
-- [ ] Add retry logic to API calls
-- [ ] Implement sanitization utilities
-- [ ] Fix price parsing edge cases
-- [ ] Write unit tests for services
-- [ ] Create FAQ document
-- [ ] Update README with troubleshooting
+### Arabic Detection Pattern
+```typescript
+const arabicRegex = /[\u0600-\u06FF]/;
+```
+This matches any character in the Arabic Unicode block (U+0600 to U+06FF), which includes:
+- Arabic letters
+- Arabic diacritics
+- Arabic punctuation
+- Arabic-Indic digits
 
 ---
 
 ## Success Criteria
 
-✅ **Security**: No API keys in source control, all external URLs validated
-✅ **Reliability**: Error boundaries prevent crashes, all async operations have error handling
-✅ **Performance**: Images download 5x faster, translations complete without hanging
-✅ **Code Quality**: No `any` types, all functions documented, components under 300 lines
-✅ **UX**: Clear progress feedback, keyboard shortcuts work, accessible to screen readers
-✅ **Maintainability**: Modular code, constants extracted, test coverage for critical paths
-
----
-
-## Non-Goals (Keep Frontend-Only)
-
-❌ **No Backend Server**: Keep all processing client-side
-❌ **No Database**: Continue using IndexedDB for storage
-❌ **No User Authentication**: Remains single-user desktop app
-❌ **No Server-Side Rendering**: Keep as SPA with Vite
-❌ **No Native App**: Browser-based only
-
----
-
-## Questions for Clarification
-
-1. **API Key Security**: Is it acceptable for the Gemini API key to be visible to users in DevTools? (Since this is an internal tool)
-2. **Modifier Mode**: Should image generation work in Modifier Mode, or is translation-only intentional?
-3. **Browser Support**: Are there specific versions of Chrome/Safari/Firefox that must be supported?
-4. **Offline Mode**: Is offline functionality required, or is internet connectivity assumed?
-5. **Multi-language UI**: Should the interface itself be translatable to Arabic?
+✅ **Arabic re-translation bug fixed** - Already-Arabic modifiers don't get sent to AI
+✅ **Bidirectional translation works** - Brand names and modifiers translate in both directions
+✅ **Empty columns preserved** - All predefined columns appear in export regardless of data
+✅ **Modifier mode translates** - Translation toggles work when Modifier Mode is enabled
+✅ **Brand names translate** - Brand Name field translates in both directions with Arabic preserved
 
 ---
 
 ## Conclusion
 
-This prompt provides a comprehensive, prioritized roadmap for improving Grubtech Labs while maintaining its frontend-only architecture. Focus on Security (P1) and Error Handling (P2) first, as these have the highest impact on reliability and user trust. Performance and UX improvements (P3-P6) can be implemented iteratively.
+All identified Excel and translation bugs have been addressed:
+1. No more Arabic-to-Arabic re-translation
+2. Full bidirectional translation support for all fields
+3. Empty columns no longer deleted from output
+4. Modifier Mode now supports translations
+5. Brand Name field translates correctly
 
-The app has a solid foundation but needs hardening for production use. With these improvements, it will be more secure, reliable, performant, and maintainable.
+The app now functions as expected for menu data transformation and translation workflows.
