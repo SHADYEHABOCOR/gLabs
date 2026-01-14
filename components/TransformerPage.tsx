@@ -292,6 +292,9 @@ const TransformerPage: React.FC = () => {
           anomalies: []
         };
 
+        // Track translation-generated columns for modifiers
+        const modifierTranslationColumns = new Set<string>();
+
         if (options.autoTranslateArToEn) {
           setProcessingStatus('Translating Ar to En...');
           setProcessingProgress({ current: 0, total: 0 });
@@ -322,6 +325,43 @@ const TransformerPage: React.FC = () => {
           setProcessingProgress({ current: 0, total: 0 });
         }
 
+        // After translations, detect which translation columns were actually populated
+        const modifierArabicColumns = [
+          'Modifier Group Template Name[ar-ae]',
+          'Modifier Name[ar-ae]',
+          'Menu Item Name[ar-ae]',
+          'Description[ar-ae]',
+          'Brand Name[ar-ae]',
+          'Modifier Group Name[ar-ae]'
+        ];
+
+        // Find which translation columns were actually populated in any item
+        modifierArabicColumns.forEach(col => {
+          if (modifierData.some((item: any) => item[col] && item[col].toString().trim() !== '')) {
+            modifierTranslationColumns.add(col);
+          }
+        });
+
+        // Normalize all items to have the populated translation columns
+        if (modifierTranslationColumns.size > 0) {
+          modifierData = modifierData.map((item: any) => {
+            const normalizedItem = { ...item };
+            modifierTranslationColumns.forEach(col => {
+              if (normalizedItem[col] === undefined) {
+                normalizedItem[col] = '';
+              }
+            });
+            return normalizedItem;
+          });
+
+          // Add translation columns to outputColumns if not already present
+          modifierTranslationColumns.forEach(col => {
+            if (!outputColumns.includes(col)) {
+              outputColumns.push(col);
+            }
+          });
+        }
+
         setTransformedData(modifierData);
         setModifierOutputColumns(outputColumns);
         setStats(modifierStats);
@@ -335,6 +375,9 @@ const TransformerPage: React.FC = () => {
         setError("No menu items could be identified. Check your file headers or ensure your sheet contains item data.");
         setIsProcessing(false); return;
       }
+
+      // Track translation-generated columns
+      const translationColumns = new Set<string>();
 
       if (options.autoTranslateArToEn) {
         setProcessingStatus('Translating Ar to En...');
@@ -366,6 +409,36 @@ const TransformerPage: React.FC = () => {
         setProcessingProgress({ current: 0, total: 0 });
       }
 
+      // After translations, detect which translation columns were actually populated
+      // and normalize all items to have these columns for consistent output
+      const arabicTranslationColumns = [
+        'Menu Item Name[ar-ae]',
+        'Description[ar-ae]',
+        'Brand Name[ar-ae]',
+        'Modifier Group Name[ar-ae]',
+        'Modifier Name[ar-ae]'
+      ];
+
+      // Find which translation columns were actually populated in any item
+      arabicTranslationColumns.forEach(col => {
+        if (data.some(item => item[col] && item[col].toString().trim() !== '')) {
+          translationColumns.add(col);
+        }
+      });
+
+      // Normalize all items to have the populated translation columns
+      if (translationColumns.size > 0) {
+        data = data.map(item => {
+          const normalizedItem = { ...item };
+          translationColumns.forEach(col => {
+            if (normalizedItem[col] === undefined) {
+              normalizedItem[col] = '';
+            }
+          });
+          return normalizedItem;
+        });
+      }
+
       if (options.estimateCalories) {
         setProcessingStatus('Calculating Calories...');
         setProcessingProgress({ current: 0, total: 0 });
@@ -379,6 +452,19 @@ const TransformerPage: React.FC = () => {
         data = res.data;
         newStats.caloriesEstimatedCount = res.count;
         setProcessingProgress({ current: 0, total: 0 });
+
+        // After calories estimation, normalize the Calories(kcal) column if populated
+        const hasCalories = data.some(item =>
+          item['Calories(kcal)'] !== undefined && item['Calories(kcal)'] !== null && item['Calories(kcal)'] !== ''
+        );
+        if (hasCalories) {
+          data = data.map(item => {
+            if (item['Calories(kcal)'] === undefined) {
+              return { ...item, 'Calories(kcal)': '' };
+            }
+            return item;
+          });
+        }
       }
 
       if (options.generateAndSyncImages) {
