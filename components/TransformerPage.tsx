@@ -267,25 +267,59 @@ const TransformerPage: React.FC = () => {
       // Handle Modifiers Mode separately
       if (options.modifiersFormatting) {
         setProcessingStatus('Transforming modifier data...');
-        const modifierData = transformModifierData(rawData);
+        let modifierData = transformModifierData(rawData);
 
         if (modifierData.length === 0 && rawData.length > 0) {
           setError("No modifier groups could be identified. Ensure your file contains Modifier Group Template data.");
           setIsProcessing(false); return;
         }
 
-        setTransformedData(modifierData);
-        setStats({
+        // Apply translations to modifier data
+        let modifierStats = {
           totalRawRows: rawData.length,
           totalItemsProcessed: modifierData.length,
           arabicTranslationsFound: modifierData.filter(r => r['Modifier Group Template Name[ar-ae]'] || r['Modifier Name[ar-ae]']).length,
           autoTranslatedCount: 0,
+          autoTranslatedEnCount: 0,
           caloriesEstimatedCount: 0,
           imagesFromDB: 0,
           imagesGenerated: 0,
           currenciesDetected: [],
           anomalies: []
-        });
+        };
+
+        if (options.autoTranslateArToEn) {
+          setProcessingStatus('Translating Ar to En...');
+          setProcessingProgress({ current: 0, total: 0 });
+          const res = await translateArabicToEnglish(modifierData as any, (current, total) => {
+            setProcessingStatus(`Translating Ar to En...`);
+            setProcessingProgress(prev => ({
+              current: Math.max(prev.current, current),
+              total
+            }));
+          });
+          modifierData = res.data as any;
+          modifierStats.autoTranslatedEnCount = res.count;
+          setProcessingProgress({ current: 0, total: 0 });
+        }
+
+        if (options.autoTranslate) {
+          setProcessingStatus('Translating En to Ar...');
+          setProcessingProgress({ current: 0, total: 0 });
+          const res = await translateMissingArabic(modifierData as any, (current, total) => {
+            setProcessingStatus(`Translating En to Ar...`);
+            setProcessingProgress(prev => ({
+              current: Math.max(prev.current, current),
+              total
+            }));
+          });
+          modifierData = res.data as any;
+          modifierStats.autoTranslatedCount = res.count;
+          setProcessingProgress({ current: 0, total: 0 });
+        }
+
+        setTransformedData(modifierData);
+        setStats(modifierStats);
         setIsProcessing(false);
         return;
       }
