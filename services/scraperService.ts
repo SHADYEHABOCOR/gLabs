@@ -143,6 +143,125 @@ const extractUberEatsItems = (data: any, results: ScrapedItem[] = []): ScrapedIt
 };
 
 /**
+ * Fetch UberEats data using their GraphQL endpoint
+ * This sometimes bypasses anti-bot measures
+ */
+const fetchUberEatsGraphQL = async (storeId: string): Promise<any> => {
+  const graphqlEndpoint = 'https://www.ubereats.com/api/getStoreV1';
+
+  // Try via multiple CORS proxies
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(graphqlEndpoint + '?storeUuid=' + storeId)}`,
+    `https://corsproxy.io/?${encodeURIComponent(graphqlEndpoint + '?storeUuid=' + storeId)}`,
+  ];
+
+  for (const proxyUrl of proxies) {
+    try {
+      const response = await fetch(proxyUrl, {
+        signal: AbortSignal.timeout(10000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && (data.data || data.sections || data.catalogSectionsMap)) {
+          console.log('Got UberEats GraphQL response');
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn('GraphQL proxy failed:', e);
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Try to fetch menu data from UberEats using multiple strategies
+ */
+const fetchUberEatsWithStrategies = async (url: string, _storeId: string | null): Promise<string | null> => {
+  // Strategy 1: Try Google Cache
+  try {
+    const googleCacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
+    const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(googleCacheUrl)}`, {
+      signal: AbortSignal.timeout(8000)
+    });
+    if (response.ok) {
+      const html = await response.text();
+      if (html && html.includes('__NEXT_DATA__')) {
+        console.log('Got UberEats from Google Cache');
+        return html;
+      }
+    }
+  } catch (e) {
+    console.debug('Google Cache strategy failed');
+  }
+
+  // Strategy 2: Try ScrapingBee free tier (if available)
+  try {
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=free&url=${encodeURIComponent(url)}&render_js=false`;
+    const response = await fetch(scrapingBeeUrl, {
+      signal: AbortSignal.timeout(15000)
+    });
+    if (response.ok) {
+      const html = await response.text();
+      if (html && html.length > 1000) {
+        console.log('Got UberEats from ScrapingBee');
+        return html;
+      }
+    }
+  } catch (e) {
+    console.debug('ScrapingBee strategy failed');
+  }
+
+  // Strategy 3: Try web.archive.org's live version
+  try {
+    const archiveUrl = `https://web.archive.org/web/2024/${url}`;
+    const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(archiveUrl)}`, {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (response.ok) {
+      const html = await response.text();
+      if (html && html.includes('__NEXT_DATA__')) {
+        console.log('Got UberEats from Archive.org');
+        return html;
+      }
+    }
+  } catch (e) {
+    console.debug('Archive.org strategy failed');
+  }
+
+  // Strategy 4: Standard CORS proxies with different user agents
+  const proxies = [
+    { url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, name: 'allorigins' },
+    { url: `https://corsproxy.io/?${encodeURIComponent(url)}`, name: 'corsproxy' },
+    { url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, name: 'codetabs' },
+    { url: `https://thingproxy.freeboard.io/fetch/${url}`, name: 'thingproxy' },
+  ];
+
+  for (const proxy of proxies) {
+    try {
+      const response = await fetch(proxy.url, {
+        signal: AbortSignal.timeout(12000),
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+      });
+      if (response.ok) {
+        const html = await response.text();
+        if (html && html.length > 1000) {
+          console.log(`Got UberEats from ${proxy.name}`);
+          return html;
+        }
+      }
+    } catch (e) {
+      console.debug(`${proxy.name} failed`);
+    }
+  }
+
+  return null;
+};
+
+/**
  * Try to fetch UberEats menu via their internal API or third-party services
  */
 const fetchUberEatsApi = async (storeId: string, storeName?: string): Promise<ScrapedItem[]> => {
@@ -235,11 +354,49 @@ const scrapeUberEats = async (url: string): Promise<ScrapedItem[]> => {
     }
   }
 
-  try {
-    const html = await fetchWithProxy(url);
-    if (!html || typeof html !== 'string') {
-      throw new Error('Failed to fetch UberEats page');
+  // Try GraphQL API first (most reliable when it works)
+  if (storeId) {
+    try {
+      console.log('Trying UberEats GraphQL API...');
+      const graphqlData = await fetchUberEatsGraphQL(storeId);
+      if (graphqlData) {
+        extractUberEatsItems(graphqlData, scrapedItems);
+        if (scrapedItems.length > 0) {
+          console.log(`Found ${scrapedItems.length} items via GraphQL`);
+          return scrapedItems;
+        }
+      }
+    } catch (e) {
+      console.warn('GraphQL failed:', e);
     }
+  }
+
+  // Try multiple scraping strategies
+  let html: string | null = null;
+  try {
+    console.log('Trying multiple scraping strategies...');
+    html = await fetchUberEatsWithStrategies(url, storeId);
+    if (html) {
+      console.log('Got HTML response');
+    }
+  } catch (e) {
+    console.warn('Strategies failed:', e);
+  }
+
+  // Final fallback to regular proxies
+  if (!html) {
+    try {
+      html = await fetchWithProxy(url);
+    } catch (e) {
+      console.warn('Proxy fetch failed:', e);
+    }
+  }
+
+  if (!html || typeof html !== 'string') {
+    throw new Error('Failed to fetch UberEats page');
+  }
+
+  try {
 
     // Look for __NEXT_DATA__ script tag (Next.js SSR data)
     const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
