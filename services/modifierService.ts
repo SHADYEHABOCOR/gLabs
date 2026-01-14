@@ -48,6 +48,14 @@ const parseTranslation = (value: string): { langCode: string; text: string } | n
 };
 
 /**
+ * Check if text contains Arabic characters
+ */
+const hasArabicText = (text: string): boolean => {
+  if (!text) return false;
+  return /[\u0600-\u06FF]/.test(text);
+};
+
+/**
  * Check if a row is a translation row (main ID fields are empty, but has translation values)
  */
 const isTranslationRow = (row: any): boolean => {
@@ -120,14 +128,18 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         outputRows.push({ ...currentModifier });
       }
 
+      // Detect if names are in Arabic and handle accordingly
+      const groupNameIsArabic = hasArabicText(groupName);
+      const modifierNameIsArabic = hasArabicText(modifierName);
+
       // New modifier group starts
       currentModifier = {
         'Modifier Group Template Id': groupId,
-        'Modifier Group Template Name': groupName,
-        'Modifier Group Template Name[ar-ae]': '',
+        'Modifier Group Template Name': groupNameIsArabic ? '' : groupName,
+        'Modifier Group Template Name[ar-ae]': groupNameIsArabic ? groupName : '',
         'Modifier Id': modifierId || '',
-        'Modifier Name': modifierName || '',
-        'Modifier Name[ar-ae]': '',
+        'Modifier Name': modifierNameIsArabic ? '' : (modifierName || ''),
+        'Modifier Name[ar-ae]': modifierNameIsArabic ? (modifierName || '') : '',
         'Modifier External Id': row['Modifier External Id'] || '',
         'Modifier Max Limit': row['Modifier Max Limit'] || '',
         'Calories(kcal)': row['Calories(kcal)'] || '',
@@ -139,6 +151,14 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         const priceColumn = `Price[${currency}]`;
         currentModifier[priceColumn] = row['Modifier Price'];
         generatedColumns.add(priceColumn);
+      }
+
+      // Track that we generated the [ar-ae] columns
+      if (groupNameIsArabic) {
+        generatedColumns.add('Modifier Group Template Name[ar-ae]');
+      }
+      if (modifierNameIsArabic) {
+        generatedColumns.add('Modifier Name[ar-ae]');
       }
 
     } else if (modifierId) {
@@ -147,14 +167,17 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         outputRows.push({ ...currentModifier });
       }
 
+      // Detect if modifier name is in Arabic
+      const modifierNameIsArabic = hasArabicText(modifierName);
+
       // New modifier in existing group
       currentModifier = {
         'Modifier Group Template Id': '',
         'Modifier Group Template Name': '',
         'Modifier Group Template Name[ar-ae]': '',
         'Modifier Id': modifierId,
-        'Modifier Name': modifierName || '',
-        'Modifier Name[ar-ae]': '',
+        'Modifier Name': modifierNameIsArabic ? '' : (modifierName || ''),
+        'Modifier Name[ar-ae]': modifierNameIsArabic ? (modifierName || '') : '',
         'Modifier External Id': row['Modifier External Id'] || '',
         'Modifier Max Limit': row['Modifier Max Limit'] || '',
         'Calories(kcal)': row['Calories(kcal)'] || '',
@@ -166,6 +189,11 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         const priceColumn = `Price[${currency}]`;
         currentModifier[priceColumn] = row['Modifier Price'];
         generatedColumns.add(priceColumn);
+      }
+
+      // Track that we generated the [ar-ae] column
+      if (modifierNameIsArabic) {
+        generatedColumns.add('Modifier Name[ar-ae]');
       }
     }
   }
