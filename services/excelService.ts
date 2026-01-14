@@ -177,6 +177,16 @@ export const transformMenuData = (
     };
   }
 
+  // Track original columns from input data before normalization
+  const originalColumns = Object.keys(rawData[0]);
+
+  // Get normalized column names from first row for output mapping
+  const firstNormalizedRow = normalizeRow(rawData[0]);
+  const normalizedInputColumns = Object.keys(firstNormalizedRow);
+
+  // Track generated columns during transformation using a Set
+  const generatedColumns = new Set<string>();
+
   let currentItem: TransformedMenuItem | null = null;
 
   for (let i = 0; i < rawData.length; i++) {
@@ -193,15 +203,19 @@ export const transformMenuData = (
         // If it's a modifier or group, map it accordingly
         if (row['Modifier Group Name']) {
           currentItem['Modifier Group Name[ar-ae]'] = cleanVal;
+          generatedColumns.add('Modifier Group Name[ar-ae]');
         } else if (row['Modifier Name']) {
           currentItem['Modifier Name[ar-ae]'] = cleanVal;
+          generatedColumns.add('Modifier Name[ar-ae]');
         } else {
           currentItem['Menu Item Name[ar-ae]'] = cleanVal;
+          generatedColumns.add('Menu Item Name[ar-ae]');
         }
 
         const desc = row['Description'] || '';
         if (desc.toString().startsWith('[ar-ae]:')) {
           currentItem['Description[ar-ae]'] = desc.toString().replace('[ar-ae]:', '').trim();
+          generatedColumns.add('Description[ar-ae]');
         }
         arabicCount++;
       } else {
@@ -232,8 +246,10 @@ export const transformMenuData = (
       if (options.splitPrice && row['Price']) {
         const { currency, value } = parsePrice(row['Price'].toString());
         if (currency && value !== null) {
-          newItem[`Price[${currency}]`] = value;
+          const priceColumn = `Price[${currency}]`;
+          newItem[priceColumn] = value;
           currencies.add(currency);
+          generatedColumns.add(priceColumn);
         }
       }
 
@@ -242,6 +258,7 @@ export const transformMenuData = (
         const imageUrl = newItem['Image URL'].toString();
         if (imageUrl.includes('drive.google.com')) {
           newItem['Image URL'] = convertDriveLinkToDirectUrl(imageUrl);
+          generatedColumns.add('Image URL');
         }
       }
 
@@ -250,38 +267,18 @@ export const transformMenuData = (
     }
   }
 
-  const finalOrder = [
-    'Menu Item Id',
-    'Menu Item Name', 'Menu Item Name[ar-ae]',
-    'Description', 'Description[ar-ae]',
-    'Brand Id', 'Brand Name', 'Brand Name[ar-ae]',
-    'Modifier Group Name', 'Modifier Group Name[ar-ae]',
-    'Modifier Name', 'Modifier Name[ar-ae]',
-    'Sub-Modifier Group Name', 'Sub-Modifier Group Name[ar-ae]',
-    'Sub-Modifier Name', 'Sub-Modifier Name[ar-ae]',
-    'External Id', 'Barcode',
-    'Preparation Time',
-    'Routing Label Id', 'Routing Label', 'Routing Label[ar-ae]',
-    'Ingredient', 'Packaging'
-  ];
-
+  // Build dynamic output columns: original input columns first, then generated columns not in original
   const sortedCurrencies = Array.from(currencies).sort();
-  sortedCurrencies.forEach(curr => finalOrder.push(`Price[${curr}]`));
 
-  finalOrder.push(
-    'Classification', 'Classification[ar-ae]',
-    'Allergen', 'Allergen[ar-ae]',
-    'Tag', 'Tag[ar-ae]',
-    'Calories(kcal)', 'Caffeine Content(g)', 'Sodium Content(g)', 'Salt Content(g)',
-    'Image URL'
-  );
-
-  // Keep all columns, don't filter out empty ones
-  const activeColumns = finalOrder;
+  // Build output columns: original columns (normalized) first, then generated columns not in original
+  const outputColumns = [
+    ...normalizedInputColumns,
+    ...Array.from(generatedColumns).filter(col => !normalizedInputColumns.includes(col))
+  ];
 
   const normalizedData = transformedData.map(item => {
     const orderedItem: any = {};
-    activeColumns.forEach(key => {
+    outputColumns.forEach(key => {
       orderedItem[key] = (item[key] !== undefined && item[key] !== null) ? item[key] : '';
     });
     orderedItem._imageSource = item._imageSource || 'none';

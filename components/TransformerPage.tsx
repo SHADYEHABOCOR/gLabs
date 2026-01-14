@@ -69,6 +69,7 @@ const TransformerPage: React.FC = () => {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
   const [transformedData, setTransformedData] = useState<any[] | null>(null);
+  const [modifierOutputColumns, setModifierOutputColumns] = useState<string[]>([]);
   const [stats, setStats] = useState<TransformationStats | null>(null);
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +105,7 @@ const TransformerPage: React.FC = () => {
       setFile(uploadedFile);
       setError(null);
       setTransformedData(null);
+      setModifierOutputColumns([]);
       setStats(null);
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -267,7 +269,9 @@ const TransformerPage: React.FC = () => {
       // Handle Modifiers Mode separately
       if (options.modifiersFormatting) {
         setProcessingStatus('Transforming modifier data...');
-        let modifierData = transformModifierData(rawData);
+        const modifierResult = transformModifierData(rawData);
+        let modifierData = modifierResult.data;
+        let outputColumns = modifierResult.outputColumns;
 
         if (modifierData.length === 0 && rawData.length > 0) {
           setError("No modifier groups could be identified. Ensure your file contains Modifier Group Template data.");
@@ -287,6 +291,9 @@ const TransformerPage: React.FC = () => {
           currenciesDetected: [],
           anomalies: []
         };
+
+        // Track translation-generated columns for modifiers
+        const modifierTranslationColumns = new Set<string>();
 
         if (options.autoTranslateArToEn) {
           setProcessingStatus('Translating Ar to En...');
@@ -318,7 +325,45 @@ const TransformerPage: React.FC = () => {
           setProcessingProgress({ current: 0, total: 0 });
         }
 
+        // After translations, detect which translation columns were actually populated
+        const modifierArabicColumns = [
+          'Modifier Group Template Name[ar-ae]',
+          'Modifier Name[ar-ae]',
+          'Menu Item Name[ar-ae]',
+          'Description[ar-ae]',
+          'Brand Name[ar-ae]',
+          'Modifier Group Name[ar-ae]'
+        ];
+
+        // Find which translation columns were actually populated in any item
+        modifierArabicColumns.forEach(col => {
+          if (modifierData.some((item: any) => item[col] && item[col].toString().trim() !== '')) {
+            modifierTranslationColumns.add(col);
+          }
+        });
+
+        // Normalize all items to have the populated translation columns
+        if (modifierTranslationColumns.size > 0) {
+          modifierData = modifierData.map((item: any) => {
+            const normalizedItem = { ...item };
+            modifierTranslationColumns.forEach(col => {
+              if (normalizedItem[col] === undefined) {
+                normalizedItem[col] = '';
+              }
+            });
+            return normalizedItem;
+          });
+
+          // Add translation columns to outputColumns if not already present
+          modifierTranslationColumns.forEach(col => {
+            if (!outputColumns.includes(col)) {
+              outputColumns.push(col);
+            }
+          });
+        }
+
         setTransformedData(modifierData);
+        setModifierOutputColumns(outputColumns);
         setStats(modifierStats);
         setIsProcessing(false);
         return;
@@ -330,6 +375,9 @@ const TransformerPage: React.FC = () => {
         setError("No menu items could be identified. Check your file headers or ensure your sheet contains item data.");
         setIsProcessing(false); return;
       }
+
+      // Track translation-generated columns
+      const translationColumns = new Set<string>();
 
       if (options.autoTranslateArToEn) {
         setProcessingStatus('Translating Ar to En...');
@@ -361,6 +409,36 @@ const TransformerPage: React.FC = () => {
         setProcessingProgress({ current: 0, total: 0 });
       }
 
+      // After translations, detect which translation columns were actually populated
+      // and normalize all items to have these columns for consistent output
+      const arabicTranslationColumns = [
+        'Menu Item Name[ar-ae]',
+        'Description[ar-ae]',
+        'Brand Name[ar-ae]',
+        'Modifier Group Name[ar-ae]',
+        'Modifier Name[ar-ae]'
+      ];
+
+      // Find which translation columns were actually populated in any item
+      arabicTranslationColumns.forEach(col => {
+        if (data.some(item => item[col] && item[col].toString().trim() !== '')) {
+          translationColumns.add(col);
+        }
+      });
+
+      // Normalize all items to have the populated translation columns
+      if (translationColumns.size > 0) {
+        data = data.map(item => {
+          const normalizedItem = { ...item };
+          translationColumns.forEach(col => {
+            if (normalizedItem[col] === undefined) {
+              normalizedItem[col] = '';
+            }
+          });
+          return normalizedItem;
+        });
+      }
+
       if (options.estimateCalories) {
         setProcessingStatus('Calculating Calories...');
         setProcessingProgress({ current: 0, total: 0 });
@@ -374,6 +452,19 @@ const TransformerPage: React.FC = () => {
         data = res.data;
         newStats.caloriesEstimatedCount = res.count;
         setProcessingProgress({ current: 0, total: 0 });
+
+        // After calories estimation, normalize the Calories(kcal) column if populated
+        const hasCalories = data.some(item =>
+          item['Calories(kcal)'] !== undefined && item['Calories(kcal)'] !== null && item['Calories(kcal)'] !== ''
+        );
+        if (hasCalories) {
+          data = data.map(item => {
+            if (item['Calories(kcal)'] === undefined) {
+              return { ...item, 'Calories(kcal)': '' };
+            }
+            return item;
+          });
+        }
       }
 
       if (options.generateAndSyncImages) {
@@ -470,6 +561,21 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
         }
       }
 
+      // Track Image URL as generated column when images are assigned
+      // Check if any item has an Image URL populated
+      const hasImageUrl = finalData.some(item =>
+        item['Image URL'] !== undefined && item['Image URL'] !== null && item['Image URL'] !== ''
+      );
+
+      // Normalize all items to have Image URL column if any images were assigned
+      if (hasImageUrl) {
+        finalData.forEach(item => {
+          if (item['Image URL'] === undefined) {
+            item['Image URL'] = '';
+          }
+        });
+      }
+
       const sortedFinalData = sortDataByVisuals(finalData);
       setTransformedData(sortedFinalData);
       setStats(prev => prev ? ({
@@ -477,7 +583,7 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
         imagesFromDB: dbCount,
         imagesGenerated: genCount
       }) : null);
-      
+
       await refreshLibrary();
       if (sortedFinalData.length > 0) getAIInsights(stats!, sortedFinalData.slice(0, 5)).then(setAiInsights);
     } finally {
@@ -657,14 +763,14 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <button onClick={() => options.modifiersFormatting ? downloadModifierCSV(transformedData, "modifiers") : downloadCSV(transformedData, "menu")} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">CSV</button>
+                    <button onClick={() => options.modifiersFormatting ? downloadModifierCSV(transformedData, "modifiers", modifierOutputColumns) : downloadCSV(transformedData, "menu")} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">CSV</button>
                     {!options.modifiersFormatting && (
                       <button onClick={downloadAllImages} disabled={isZipping || !transformedData.some(i => i['Image URL'])} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold flex items-center disabled:opacity-50 transition-all active:scale-95">
                         {isZipping ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileArchive className="w-4 h-4 mr-2" />}
                         <span>{isZipping ? `Packing ZIP (${zipProgress.current}/${zipProgress.total})...` : 'ZIP Images (JPG)'}</span>
                       </button>
                     )}
-                    <button onClick={() => options.modifiersFormatting ? downloadModifierExcel(transformedData, "modifiers") : downloadExcel(transformedData, "menu")} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200">Standard Excel</button>
+                    <button onClick={() => options.modifiersFormatting ? downloadModifierExcel(transformedData, "modifiers", modifierOutputColumns) : downloadExcel(transformedData, "menu")} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200">Standard Excel</button>
                   </div>
                 </div>
               </div>
