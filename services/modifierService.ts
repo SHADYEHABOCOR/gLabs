@@ -89,6 +89,7 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
 
   // Track original columns from input data before any processing
   const originalColumns = Object.keys(rawData[0]);
+  console.log('📋 Original columns from input:', originalColumns);
 
   // Track generated columns during transformation using a Set
   const generatedColumns = new Set<string>();
@@ -229,6 +230,9 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
       processedColumns.add(col);
     }
   });
+
+  console.log('📊 Final output columns:', outputColumns);
+  console.log('🔧 Generated columns:', Array.from(generatedColumns));
 
   // Normalize output data to only include output columns
   const normalizedData = outputRows.map(row => {
