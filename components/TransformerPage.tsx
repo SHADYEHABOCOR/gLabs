@@ -561,6 +561,21 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
         }
       }
 
+      // Track Image URL as generated column when images are assigned
+      // Check if any item has an Image URL populated
+      const hasImageUrl = finalData.some(item =>
+        item['Image URL'] !== undefined && item['Image URL'] !== null && item['Image URL'] !== ''
+      );
+
+      // Normalize all items to have Image URL column if any images were assigned
+      if (hasImageUrl) {
+        finalData.forEach(item => {
+          if (item['Image URL'] === undefined) {
+            item['Image URL'] = '';
+          }
+        });
+      }
+
       const sortedFinalData = sortDataByVisuals(finalData);
       setTransformedData(sortedFinalData);
       setStats(prev => prev ? ({
@@ -568,7 +583,7 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
         imagesFromDB: dbCount,
         imagesGenerated: genCount
       }) : null);
-      
+
       await refreshLibrary();
       if (sortedFinalData.length > 0) getAIInsights(stats!, sortedFinalData.slice(0, 5)).then(setAiInsights);
     } finally {
