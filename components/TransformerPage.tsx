@@ -662,7 +662,7 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <button onClick={() => options.modifiersFormatting ? downloadModifierCSV(transformedData, "modifiers") : downloadCSV(transformedData, "menu")} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">CSV</button>
+                    <button onClick={() => options.modifiersFormatting ? downloadModifierCSV(transformedData, "modifiers", modifierOutputColumns) : downloadCSV(transformedData, "menu")} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">CSV</button>
                     {!options.modifiersFormatting && (
                       <button onClick={downloadAllImages} disabled={isZipping || !transformedData.some(i => i['Image URL'])} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold flex items-center disabled:opacity-50 transition-all active:scale-95">
                         {isZipping ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileArchive className="w-4 h-4 mr-2" />}

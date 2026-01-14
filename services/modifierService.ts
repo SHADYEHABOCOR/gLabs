@@ -226,25 +226,12 @@ export const downloadModifierExcel = (data: ModifierRow[], filename: string = 'm
 };
 
 /**
- * Export modifier data to CSV
+ * Export modifier data to CSV with proper column ordering
+ * Uses dynamic columns from transformation (original + generated) instead of hardcoded template
  */
-export const downloadModifierCSV = (data: ModifierRow[], filename: string = 'modifiers') => {
-  const outputColumns = [
-    'Modifier Group Template Id',
-    'Modifier Group Template Name',
-    'Modifier Group Template Name[ar-ae]',
-    'Modifier Id',
-    'Modifier Name',
-    'Modifier Name[ar-ae]',
-    'Modifier External Id',
-    'Modifier Max Limit',
-    'Price[BHD]',
-    'Price[AED]',
-    'Price[SAR]',
-    'Price[GBP]',
-    'Price[QAR]',
-    'Calories(kcal)'
-  ];
+export const downloadModifierCSV = (data: ModifierRow[], filename: string = 'modifiers', columns?: string[]) => {
+  // Use provided columns or derive from data keys (which are already normalized)
+  const outputColumns = columns ?? (data.length > 0 ? Object.keys(data[0]) : []);
 
   const csvContent = [
     outputColumns.join(','),
