@@ -70,13 +70,15 @@ export const translateMissingArabic = async (
     const name = (item['Menu Item Name'] || '').toString();
     const desc = (item['Description'] || '').toString();
     const modGroup = (item['Modifier Group Name'] || '').toString();
+    const modName = (item['Modifier Name'] || '').toString();
 
     // Need translation if: source exists, is NOT Arabic, and Arabic column is empty
     const needsNameTranslation = name && !arabicRegex.test(name) && !item['Menu Item Name[ar-ae]'];
     const needsDescTranslation = desc && !arabicRegex.test(desc) && !item['Description[ar-ae]'];
     const needsModGroupTranslation = modGroup && !arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]'];
+    const needsModNameTranslation = modName && !arabicRegex.test(modName) && !item['Modifier Name[ar-ae]'];
 
-    return needsNameTranslation || needsDescTranslation || needsModGroupTranslation;
+    return needsNameTranslation || needsDescTranslation || needsModGroupTranslation || needsModNameTranslation;
   });
 
   if (itemsToTranslate.length === 0) return { data: translatedData, count: alreadyArabicCount };
@@ -94,13 +96,21 @@ export const translateMissingArabic = async (
 
   // Process batches with controlled concurrency
   const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
-    const translationList = batch.map(item => ({
-      id: item['Menu Item Id'],
-      name: item['Menu Item Name'],
-      description: item['Description'],
-      modifierGroup: item['Modifier Group Name'],
-      modifierName: item['Modifier Name']
-    }));
+    const translationList = batch.map(item => {
+      const name = (item['Menu Item Name'] || '').toString();
+      const desc = (item['Description'] || '').toString();
+      const modGroup = (item['Modifier Group Name'] || '').toString();
+      const modName = (item['Modifier Name'] || '').toString();
+
+      return {
+        id: item['Menu Item Id'],
+        // Only send non-Arabic fields for translation
+        name: (name && !arabicRegex.test(name)) ? name : '',
+        description: (desc && !arabicRegex.test(desc)) ? desc : '',
+        modifierGroup: (modGroup && !arabicRegex.test(modGroup)) ? modGroup : '',
+        modifierName: (modName && !arabicRegex.test(modName)) ? modName : ''
+      };
+    });
 
     const prompt = `
       You are an expert Arabic Menu Translator for the GCC/UAE market.
