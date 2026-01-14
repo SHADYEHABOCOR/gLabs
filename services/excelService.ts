@@ -267,14 +267,34 @@ export const transformMenuData = (
     }
   }
 
-  // Build dynamic output columns: original input columns first, then generated columns not in original
+  // Build dynamic output columns: keep original order, add [ar-ae] immediately after each base column
   const sortedCurrencies = Array.from(currencies).sort();
 
-  // Build output columns: original columns (normalized) first, then generated columns not in original
-  const outputColumns = [
-    ...normalizedInputColumns,
-    ...Array.from(generatedColumns).filter(col => !normalizedInputColumns.includes(col))
-  ];
+  const outputColumns: string[] = [];
+  const processedColumns = new Set<string>();
+
+  // Go through original columns in order, adding [ar-ae] pair right after each column
+  normalizedInputColumns.forEach(col => {
+    if (!processedColumns.has(col)) {
+      outputColumns.push(col);
+      processedColumns.add(col);
+
+      // Check if this column has an [ar-ae] counterpart
+      const arabicCol = `${col}[ar-ae]`;
+      if (generatedColumns.has(arabicCol)) {
+        outputColumns.push(arabicCol);
+        processedColumns.add(arabicCol);
+      }
+    }
+  });
+
+  // Add any remaining generated columns that weren't paired (like Price[AED], Image URL)
+  Array.from(generatedColumns).forEach(col => {
+    if (!processedColumns.has(col)) {
+      outputColumns.push(col);
+      processedColumns.add(col);
+    }
+  });
 
   const normalizedData = transformedData.map(item => {
     const orderedItem: any = {};
