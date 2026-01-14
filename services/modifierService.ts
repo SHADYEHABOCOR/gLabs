@@ -128,18 +128,14 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         outputRows.push({ ...currentModifier });
       }
 
-      // Detect if names are in Arabic and handle accordingly
-      const groupNameIsArabic = hasArabicText(groupName);
-      const modifierNameIsArabic = hasArabicText(modifierName);
-
       // New modifier group starts
       currentModifier = {
         'Modifier Group Template Id': groupId,
-        'Modifier Group Template Name': groupNameIsArabic ? '' : groupName,
-        'Modifier Group Template Name[ar-ae]': groupNameIsArabic ? groupName : '',
+        'Modifier Group Template Name': groupName,
+        'Modifier Group Template Name[ar-ae]': '',
         'Modifier Id': modifierId || '',
-        'Modifier Name': modifierNameIsArabic ? '' : (modifierName || ''),
-        'Modifier Name[ar-ae]': modifierNameIsArabic ? (modifierName || '') : '',
+        'Modifier Name': modifierName || '',
+        'Modifier Name[ar-ae]': '',
         'Modifier External Id': row['Modifier External Id'] || '',
         'Modifier Max Limit': row['Modifier Max Limit'] || '',
         'Calories(kcal)': row['Calories(kcal)'] || '',
@@ -151,14 +147,6 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         const priceColumn = `Price[${currency}]`;
         currentModifier[priceColumn] = row['Modifier Price'];
         generatedColumns.add(priceColumn);
-      }
-
-      // Track that we generated the [ar-ae] columns
-      if (groupNameIsArabic) {
-        generatedColumns.add('Modifier Group Template Name[ar-ae]');
-      }
-      if (modifierNameIsArabic) {
-        generatedColumns.add('Modifier Name[ar-ae]');
       }
 
     } else if (modifierId) {
@@ -167,17 +155,14 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         outputRows.push({ ...currentModifier });
       }
 
-      // Detect if modifier name is in Arabic
-      const modifierNameIsArabic = hasArabicText(modifierName);
-
       // New modifier in existing group
       currentModifier = {
         'Modifier Group Template Id': '',
         'Modifier Group Template Name': '',
         'Modifier Group Template Name[ar-ae]': '',
         'Modifier Id': modifierId,
-        'Modifier Name': modifierNameIsArabic ? '' : (modifierName || ''),
-        'Modifier Name[ar-ae]': modifierNameIsArabic ? (modifierName || '') : '',
+        'Modifier Name': modifierName || '',
+        'Modifier Name[ar-ae]': '',
         'Modifier External Id': row['Modifier External Id'] || '',
         'Modifier Max Limit': row['Modifier Max Limit'] || '',
         'Calories(kcal)': row['Calories(kcal)'] || '',
@@ -189,11 +174,6 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
         const priceColumn = `Price[${currency}]`;
         currentModifier[priceColumn] = row['Modifier Price'];
         generatedColumns.add(priceColumn);
-      }
-
-      // Track that we generated the [ar-ae] column
-      if (modifierNameIsArabic) {
-        generatedColumns.add('Modifier Name[ar-ae]');
       }
     }
   }
@@ -203,11 +183,56 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
     outputRows.push({ ...currentModifier });
   }
 
-  // Build dynamic output columns: original columns first, then generated columns not in original
-  const outputColumns = [
-    ...originalColumns,
-    ...Array.from(generatedColumns).filter(col => !originalColumns.includes(col))
+  // Build smart output columns: pair English columns with their Arabic counterparts
+  const outputColumns: string[] = [];
+  const processedColumns = new Set<string>();
+
+  // Define the ideal column order for modifier templates
+  const columnPairs = [
+    ['Modifier Group Template Id', null],
+    ['Modifier Group Template Name', 'Modifier Group Template Name[ar-ae]'],
+    ['Brand Id', null],
+    ['Brand Name', 'Brand Name[ar-ae]'],
+    ['Settings Type', null],
+    ['Min', null],
+    ['Max', null],
+    ['Modifier Id', null],
+    ['Modifier Name', 'Modifier Name[ar-ae]'],
+    ['Modifier External Id', null],
+    ['Modifier Max Limit', null],
+    ['Modifier Price Currency', null],
+    ['Modifier Price', null],
+    ['Tag', null],
+    ['Calories(kcal)', null],
   ];
+
+  // Add columns in pairs (base column, then [ar-ae] if exists)
+  for (const [baseCol, arabicCol] of columnPairs) {
+    if (originalColumns.includes(baseCol) || generatedColumns.has(baseCol)) {
+      outputColumns.push(baseCol);
+      processedColumns.add(baseCol);
+    }
+    if (arabicCol && (originalColumns.includes(arabicCol) || generatedColumns.has(arabicCol))) {
+      outputColumns.push(arabicCol);
+      processedColumns.add(arabicCol);
+    }
+  }
+
+  // Add any price columns (Price[SAR], Price[AED], etc.)
+  const priceColumns = Array.from(generatedColumns).filter(col => col.startsWith('Price['));
+  priceColumns.forEach(col => {
+    if (!processedColumns.has(col)) {
+      outputColumns.push(col);
+      processedColumns.add(col);
+    }
+  });
+
+  // Add any remaining columns that weren't in our predefined list
+  [...originalColumns, ...Array.from(generatedColumns)].forEach(col => {
+    if (!processedColumns.has(col)) {
+      outputColumns.push(col);
+    }
+  });
 
   // Normalize output data to only include output columns
   const normalizedData = outputRows.map(row => {

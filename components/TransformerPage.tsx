@@ -28,7 +28,7 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { RawMenuItem, TransformedMenuItem, TransformationStats, TransformOptions } from '../types';
 import { transformMenuData, downloadExcel, downloadCSV } from '../services/excelService';
-import { getAIInsights, translateMissingArabic, translateArabicToEnglish, estimateCaloriesForItems } from '../services/geminiService';
+import { getAIInsights, translateMissingArabic, translateArabicToEnglish, estimateCaloriesForItems, smartAutoTranslate } from '../services/geminiService';
 import { processImageSync, getLocalDB, bulkSaveToDB, removeFromDB, getDBKey, saveToDB, convertToJpg, sanitizeFileName } from '../services/imageService';
 import { upscaleImageUrl } from '../services/scraperService';
 import { transformModifierData, downloadModifierExcel, downloadModifierCSV } from '../services/modifierService';
@@ -80,7 +80,7 @@ const TransformerPage: React.FC = () => {
   const [pendingAssets, setPendingAssets] = useState<PendingAsset[]>([]);
   const [options, setOptions] = useState<TransformOptions>({
     applyTitleCase: true, extractArabic: true, splitPrice: true,
-    useStockImages: false, autoTranslate: false, autoTranslateArToEn: false, estimateCalories: false,
+    useStockImages: false, autoTranslate: false, autoTranslateArToEn: false, smartTranslate: false, estimateCalories: false,
     generateAndSyncImages: false, modifiersFormatting: false,
   });
 
@@ -295,34 +295,56 @@ const TransformerPage: React.FC = () => {
         // Track translation-generated columns for modifiers
         const modifierTranslationColumns = new Set<string>();
 
-        if (options.autoTranslateArToEn) {
-          setProcessingStatus('Translating Ar to En...');
+        // Smart auto-translation (auto-detects language and translates accordingly)
+        if (options.smartTranslate) {
+          setProcessingStatus('Smart Translation: Auto-detecting language...');
           setProcessingProgress({ current: 0, total: 0 });
-          const res = await translateArabicToEnglish(modifierData as any, (current, total) => {
-            setProcessingStatus(`Translating Ar to En...`);
+          const res = await smartAutoTranslate(modifierData as any, (current, total) => {
+            setProcessingStatus(`Translating (${res.direction === 'ar-to-en' ? 'Arabic → English' : 'English → Arabic'})...`);
             setProcessingProgress(prev => ({
               current: Math.max(prev.current, current),
               total
             }));
           });
           modifierData = res.data as any;
-          modifierStats.autoTranslatedEnCount = res.count;
+          if (res.direction === 'ar-to-en') {
+            modifierStats.autoTranslatedEnCount = res.count;
+          } else if (res.direction === 'en-to-ar') {
+            modifierStats.autoTranslatedCount = res.count;
+          }
           setProcessingProgress({ current: 0, total: 0 });
         }
+        // Legacy manual translation toggles (kept for backwards compatibility)
+        else {
+          if (options.autoTranslateArToEn) {
+            setProcessingStatus('Translating Ar to En...');
+            setProcessingProgress({ current: 0, total: 0 });
+            const res = await translateArabicToEnglish(modifierData as any, (current, total) => {
+              setProcessingStatus(`Translating Ar to En...`);
+              setProcessingProgress(prev => ({
+                current: Math.max(prev.current, current),
+                total
+              }));
+            });
+            modifierData = res.data as any;
+            modifierStats.autoTranslatedEnCount = res.count;
+            setProcessingProgress({ current: 0, total: 0 });
+          }
 
-        if (options.autoTranslate) {
-          setProcessingStatus('Translating En to Ar...');
-          setProcessingProgress({ current: 0, total: 0 });
-          const res = await translateMissingArabic(modifierData as any, (current, total) => {
-            setProcessingStatus(`Translating En to Ar...`);
-            setProcessingProgress(prev => ({
-              current: Math.max(prev.current, current),
-              total
-            }));
-          });
-          modifierData = res.data as any;
-          modifierStats.autoTranslatedCount = res.count;
-          setProcessingProgress({ current: 0, total: 0 });
+          if (options.autoTranslate) {
+            setProcessingStatus('Translating En to Ar...');
+            setProcessingProgress({ current: 0, total: 0 });
+            const res = await translateMissingArabic(modifierData as any, (current, total) => {
+              setProcessingStatus(`Translating En to Ar...`);
+              setProcessingProgress(prev => ({
+                current: Math.max(prev.current, current),
+                total
+              }));
+            });
+            modifierData = res.data as any;
+            modifierStats.autoTranslatedCount = res.count;
+            setProcessingProgress({ current: 0, total: 0 });
+          }
         }
 
         // After translations, detect which translation columns were actually populated
@@ -379,34 +401,56 @@ const TransformerPage: React.FC = () => {
       // Track translation-generated columns
       const translationColumns = new Set<string>();
 
-      if (options.autoTranslateArToEn) {
-        setProcessingStatus('Translating Ar to En...');
+      // Smart auto-translation (auto-detects language and translates accordingly)
+      if (options.smartTranslate) {
+        setProcessingStatus('Smart Translation: Auto-detecting language...');
         setProcessingProgress({ current: 0, total: 0 });
-        const res = await translateArabicToEnglish(data, (current, total) => {
-          setProcessingStatus(`Translating Ar to En...`);
+        const res = await smartAutoTranslate(data, (current, total) => {
+          setProcessingStatus(`Translating (${res.direction === 'ar-to-en' ? 'Arabic → English' : 'English → Arabic'})...`);
           setProcessingProgress(prev => ({
             current: Math.max(prev.current, current),
             total
           }));
         });
         data = res.data;
-        newStats.autoTranslatedEnCount = res.count;
+        if (res.direction === 'ar-to-en') {
+          newStats.autoTranslatedEnCount = res.count;
+        } else if (res.direction === 'en-to-ar') {
+          newStats.autoTranslatedCount = res.count;
+        }
         setProcessingProgress({ current: 0, total: 0 });
       }
+      // Legacy manual translation toggles (kept for backwards compatibility)
+      else {
+        if (options.autoTranslateArToEn) {
+          setProcessingStatus('Translating Ar to En...');
+          setProcessingProgress({ current: 0, total: 0 });
+          const res = await translateArabicToEnglish(data, (current, total) => {
+            setProcessingStatus(`Translating Ar to En...`);
+            setProcessingProgress(prev => ({
+              current: Math.max(prev.current, current),
+              total
+            }));
+          });
+          data = res.data;
+          newStats.autoTranslatedEnCount = res.count;
+          setProcessingProgress({ current: 0, total: 0 });
+        }
 
-      if (options.autoTranslate) {
-        setProcessingStatus('Translating En to Ar...');
-        setProcessingProgress({ current: 0, total: 0 });
-        const res = await translateMissingArabic(data, (current, total) => {
-          setProcessingStatus(`Translating En to Ar...`);
-          setProcessingProgress(prev => ({
-            current: Math.max(prev.current, current),
-            total
-          }));
-        });
-        data = res.data;
-        newStats.autoTranslatedCount = res.count;
-        setProcessingProgress({ current: 0, total: 0 });
+        if (options.autoTranslate) {
+          setProcessingStatus('Translating En to Ar...');
+          setProcessingProgress({ current: 0, total: 0 });
+          const res = await translateMissingArabic(data, (current, total) => {
+            setProcessingStatus(`Translating En to Ar...`);
+            setProcessingProgress(prev => ({
+              current: Math.max(prev.current, current),
+              total
+            }));
+          });
+          data = res.data;
+          newStats.autoTranslatedCount = res.count;
+          setProcessingProgress({ current: 0, total: 0 });
+        }
       }
 
       // After translations, detect which translation columns were actually populated
@@ -629,8 +673,7 @@ Important: Show only the finished prepared food. No raw ingredients as decoratio
               {[
                 { label: 'Modifiers Mode', sub: 'Transform modifier group templates', opt: 'modifiersFormatting', badge: 'NEW', color: 'bg-purple-50/50' },
                 { label: 'Arabic Extraction', sub: 'Merge rows with [ar-ae] prefix', opt: 'extractArabic' },
-                { label: 'Arabic to English', sub: 'Translate content to English', opt: 'autoTranslateArToEn', badge: 'SMART AI', color: 'bg-green-50/50' },
-                { label: 'English to Arabic', sub: 'Translate content to Arabic', opt: 'autoTranslate', badge: 'SMART AI', color: 'bg-blue-50/50' },
+                { label: 'Smart Translation', sub: 'Auto-detect language & translate', opt: 'smartTranslate', badge: 'AI', color: 'bg-gradient-to-r from-green-50 to-blue-50' },
                 { label: 'Estimate Calories', sub: 'Calculate values', opt: 'estimateCalories', badge: 'AI', color: 'bg-orange-50/50' },
                 { label: 'Image DB Sync', sub: 'Match by ID or Name', opt: 'generateAndSyncImages', badge: 'SMART', color: 'bg-indigo-50/50' },
                 { label: 'Formatting', sub: 'Apply Title Case', opt: 'applyTitleCase' }

@@ -436,3 +436,57 @@ export const estimateCaloriesForItems = async (
 
   return { data: processedData, count: totalEstimated };
 };
+
+/**
+ * Smart auto-translation that detects the source language and translates accordingly
+ * - If data has Arabic in main columns → translate Arabic to English
+ * - If data has English in main columns → translate English to Arabic
+ * - If data has [ar-ae] prefix format → extract and translate as needed
+ */
+export const smartAutoTranslate = async (
+  data: TransformedMenuItem[],
+  onProgress?: (current: number, total: number) => void
+): Promise<{ data: TransformedMenuItem[], count: number, direction: 'ar-to-en' | 'en-to-ar' | 'none' }> => {
+  if (data.length === 0) {
+    return { data, count: 0, direction: 'none' };
+  }
+
+  const arabicRegex = /[\u0600-\u06FF]/;
+
+  // Sample first 10 items to detect primary language
+  const sampleSize = Math.min(10, data.length);
+  let arabicCount = 0;
+  let englishCount = 0;
+
+  for (let i = 0; i < sampleSize; i++) {
+    const item = data[i];
+    const name = (item['Menu Item Name'] || item['Modifier Name'] || item['Modifier Group Template Name'] || '').toString();
+
+    if (arabicRegex.test(name)) {
+      arabicCount++;
+    } else if (name.trim().length > 0) {
+      englishCount++;
+    }
+  }
+
+  // Determine translation direction
+  let direction: 'ar-to-en' | 'en-to-ar' | 'none' = 'none';
+
+  if (arabicCount > englishCount) {
+    // Data is primarily Arabic, translate to English
+    direction = 'ar-to-en';
+    console.log('🔍 Smart Translation: Detected Arabic data, translating to English...');
+    const result = await translateArabicToEnglish(data, onProgress);
+    return { ...result, direction };
+  } else if (englishCount > 0) {
+    // Data is primarily English, translate to Arabic
+    direction = 'en-to-ar';
+    console.log('🔍 Smart Translation: Detected English data, translating to Arabic...');
+    const result = await translateMissingArabic(data, onProgress);
+    return { ...result, direction };
+  }
+
+  // No clear language detected or data is empty
+  console.log('🔍 Smart Translation: No translation needed');
+  return { data, count: 0, direction: 'none' };
+};

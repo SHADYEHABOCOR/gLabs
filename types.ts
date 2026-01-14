@@ -52,6 +52,7 @@ export interface TransformOptions {
   useStockImages: boolean;
   autoTranslate: boolean;
   autoTranslateArToEn: boolean;
+  smartTranslate: boolean;
   estimateCalories: boolean;
   generateAndSyncImages: boolean;
   modifiersFormatting: boolean;
