@@ -24,6 +24,11 @@ export interface ModifierRow {
   [key: string]: any;
 }
 
+export interface ModifierTransformResult {
+  data: ModifierRow[];
+  outputColumns: string[];
+}
+
 /**
  * Check if a value contains a translation pattern like [ar-ae]:text
  */
@@ -60,10 +65,25 @@ const isTranslationRow = (row: any): boolean => {
 
 /**
  * Transform raw modifier export data into clean flat format
+ * Tracks original columns from input and generated columns during transformation
  */
-export const transformModifierData = (rawData: any[]): ModifierRow[] => {
+export const transformModifierData = (rawData: any[]): ModifierTransformResult => {
   const outputRows: ModifierRow[] = [];
   let currentModifier: ModifierRow = {};
+
+  // Handle empty data case
+  if (!rawData || rawData.length === 0) {
+    return {
+      data: [],
+      outputColumns: []
+    };
+  }
+
+  // Track original columns from input data before any processing
+  const originalColumns = Object.keys(rawData[0]);
+
+  // Track generated columns during transformation using a Set
+  const generatedColumns = new Set<string>();
 
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i];
@@ -79,6 +99,7 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
         const parsed = parseTranslation(groupName);
         if (parsed && parsed.langCode === 'ar-ae') {
           currentModifier['Modifier Group Template Name[ar-ae]'] = parsed.text;
+          generatedColumns.add('Modifier Group Template Name[ar-ae]');
         }
       }
 
@@ -86,6 +107,7 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
         const parsed = parseTranslation(modifierName);
         if (parsed && parsed.langCode === 'ar-ae') {
           currentModifier['Modifier Name[ar-ae]'] = parsed.text;
+          generatedColumns.add('Modifier Name[ar-ae]');
         }
       }
       continue;
@@ -114,7 +136,9 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
       // Handle price
       if (row['Modifier Price'] && row['Modifier Price Currency']) {
         const currency = String(row['Modifier Price Currency']).toUpperCase();
-        currentModifier[`Price[${currency}]`] = row['Modifier Price'];
+        const priceColumn = `Price[${currency}]`;
+        currentModifier[priceColumn] = row['Modifier Price'];
+        generatedColumns.add(priceColumn);
       }
 
     } else if (modifierId) {
@@ -139,7 +163,9 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
       // Handle price
       if (row['Modifier Price'] && row['Modifier Price Currency']) {
         const currency = String(row['Modifier Price Currency']).toUpperCase();
-        currentModifier[`Price[${currency}]`] = row['Modifier Price'];
+        const priceColumn = `Price[${currency}]`;
+        currentModifier[priceColumn] = row['Modifier Price'];
+        generatedColumns.add(priceColumn);
       }
     }
   }
@@ -149,7 +175,25 @@ export const transformModifierData = (rawData: any[]): ModifierRow[] => {
     outputRows.push({ ...currentModifier });
   }
 
-  return outputRows;
+  // Build dynamic output columns: original columns first, then generated columns not in original
+  const outputColumns = [
+    ...originalColumns,
+    ...Array.from(generatedColumns).filter(col => !originalColumns.includes(col))
+  ];
+
+  // Normalize output data to only include output columns
+  const normalizedData = outputRows.map(row => {
+    const orderedRow: ModifierRow = {};
+    outputColumns.forEach(key => {
+      orderedRow[key] = row[key] !== undefined && row[key] !== null ? row[key] : '';
+    });
+    return orderedRow;
+  });
+
+  return {
+    data: normalizedData,
+    outputColumns
+  };
 };
 
 /**

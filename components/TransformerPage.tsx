@@ -267,7 +267,8 @@ const TransformerPage: React.FC = () => {
       // Handle Modifiers Mode separately
       if (options.modifiersFormatting) {
         setProcessingStatus('Transforming modifier data...');
-        let modifierData = transformModifierData(rawData);
+        const modifierResult = transformModifierData(rawData);
+        let modifierData = modifierResult.data;
 
         if (modifierData.length === 0 && rawData.length > 0) {
           setError("No modifier groups could be identified. Ensure your file contains Modifier Group Template data.");
