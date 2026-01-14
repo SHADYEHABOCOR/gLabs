@@ -180,6 +180,10 @@ export const transformMenuData = (
   // Track original columns from input data before normalization
   const originalColumns = Object.keys(rawData[0]);
 
+  // Get normalized column names from first row for output mapping
+  const firstNormalizedRow = normalizeRow(rawData[0]);
+  const normalizedInputColumns = Object.keys(firstNormalizedRow);
+
   // Track generated columns during transformation using a Set
   const generatedColumns = new Set<string>();
 
@@ -263,38 +267,18 @@ export const transformMenuData = (
     }
   }
 
-  const finalOrder = [
-    'Menu Item Id',
-    'Menu Item Name', 'Menu Item Name[ar-ae]',
-    'Description', 'Description[ar-ae]',
-    'Brand Id', 'Brand Name', 'Brand Name[ar-ae]',
-    'Modifier Group Name', 'Modifier Group Name[ar-ae]',
-    'Modifier Name', 'Modifier Name[ar-ae]',
-    'Sub-Modifier Group Name', 'Sub-Modifier Group Name[ar-ae]',
-    'Sub-Modifier Name', 'Sub-Modifier Name[ar-ae]',
-    'External Id', 'Barcode',
-    'Preparation Time',
-    'Routing Label Id', 'Routing Label', 'Routing Label[ar-ae]',
-    'Ingredient', 'Packaging'
-  ];
-
+  // Build dynamic output columns: original input columns first, then generated columns not in original
   const sortedCurrencies = Array.from(currencies).sort();
-  sortedCurrencies.forEach(curr => finalOrder.push(`Price[${curr}]`));
 
-  finalOrder.push(
-    'Classification', 'Classification[ar-ae]',
-    'Allergen', 'Allergen[ar-ae]',
-    'Tag', 'Tag[ar-ae]',
-    'Calories(kcal)', 'Caffeine Content(g)', 'Sodium Content(g)', 'Salt Content(g)',
-    'Image URL'
-  );
-
-  // Keep all columns, don't filter out empty ones
-  const activeColumns = finalOrder;
+  // Build output columns: original columns (normalized) first, then generated columns not in original
+  const outputColumns = [
+    ...normalizedInputColumns,
+    ...Array.from(generatedColumns).filter(col => !normalizedInputColumns.includes(col))
+  ];
 
   const normalizedData = transformedData.map(item => {
     const orderedItem: any = {};
-    activeColumns.forEach(key => {
+    outputColumns.forEach(key => {
       orderedItem[key] = (item[key] !== undefined && item[key] !== null) ? item[key] : '';
     });
     orderedItem._imageSource = item._imageSource || 'none';
