@@ -38,21 +38,53 @@ export const translateMissingArabic = async (
   data: TransformedMenuItem[],
   onProgress?: (current: number, total: number) => void
 ): Promise<{ data: TransformedMenuItem[], count: number }> => {
-  const itemsToTranslate = data.filter(item => {
-    const needsNameTranslation = item['Menu Item Name'] && !item['Menu Item Name[ar-ae]'];
-    const needsDescTranslation = item['Description'] && !item['Description[ar-ae]'];
-    const needsModGroupTranslation = item['Modifier Group Name'] && !item['Modifier Group Name[ar-ae]'];
+  const arabicRegex = /[\u0600-\u06FF]/;
+  const translatedData = [...data];
+  let alreadyArabicCount = 0;
+
+  // First pass: If source is already Arabic, copy to Arabic column and skip AI translation
+  translatedData.forEach(item => {
+    const name = (item['Menu Item Name'] || '').toString();
+    const desc = (item['Description'] || '').toString();
+    const modGroup = (item['Modifier Group Name'] || '').toString();
+    const modName = (item['Modifier Name'] || '').toString();
+
+    // If source is Arabic and Arabic column is empty, copy it over
+    if (name && arabicRegex.test(name) && !item['Menu Item Name[ar-ae]']) {
+      item['Menu Item Name[ar-ae]'] = name;
+      alreadyArabicCount++;
+    }
+    if (desc && arabicRegex.test(desc) && !item['Description[ar-ae]']) {
+      item['Description[ar-ae]'] = desc;
+    }
+    if (modGroup && arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]']) {
+      item['Modifier Group Name[ar-ae]'] = modGroup;
+    }
+    if (modName && arabicRegex.test(modName) && !item['Modifier Name[ar-ae]']) {
+      item['Modifier Name[ar-ae]'] = modName;
+    }
+  });
+
+  // Second pass: Only translate items that have non-Arabic source and empty Arabic column
+  const itemsToTranslate = translatedData.filter(item => {
+    const name = (item['Menu Item Name'] || '').toString();
+    const desc = (item['Description'] || '').toString();
+    const modGroup = (item['Modifier Group Name'] || '').toString();
+
+    // Need translation if: source exists, is NOT Arabic, and Arabic column is empty
+    const needsNameTranslation = name && !arabicRegex.test(name) && !item['Menu Item Name[ar-ae]'];
+    const needsDescTranslation = desc && !arabicRegex.test(desc) && !item['Description[ar-ae]'];
+    const needsModGroupTranslation = modGroup && !arabicRegex.test(modGroup) && !item['Modifier Group Name[ar-ae]'];
 
     return needsNameTranslation || needsDescTranslation || needsModGroupTranslation;
   });
 
-  if (itemsToTranslate.length === 0) return { data, count: 0 };
+  if (itemsToTranslate.length === 0) return { data: translatedData, count: alreadyArabicCount };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const batchSize = 25; // Increased from 10 to 25
   const concurrency = 3; // Process 3 batches in parallel
-  const translatedData = [...data];
-  let totalTranslated = 0;
+  let totalTranslated = alreadyArabicCount;
 
   // Create all batches upfront
   const batches: typeof itemsToTranslate[] = [];
