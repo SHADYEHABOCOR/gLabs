@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { TransformationStats, TransformedMenuItem } from "../types";
+import { orderColumnsCorrectly } from "./columnUtils";
 
 export const getAIInsights = async (stats: TransformationStats, sampleData: any[]) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
