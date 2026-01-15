@@ -361,46 +361,23 @@ export const transformMenuData = (
     }
   }
 
-  // Build dynamic output columns: keep original order, add [ar-ae] immediately after each base column
-  const sortedCurrencies = Array.from(currencies).sort();
-
-  const outputColumns: string[] = [];
-  const processedColumns = new Set<string>();
-
-  // Go through original columns in order, adding [ar-ae] pair right after each column
-  normalizedInputColumns.forEach(col => {
-    if (!processedColumns.has(col)) {
-      outputColumns.push(col);
-      processedColumns.add(col);
-
-      // Check if this column has an [ar-ae] counterpart
-      const arabicCol = `${col}[ar-ae]`;
-      if (generatedColumns.has(arabicCol)) {
-        outputColumns.push(arabicCol);
-        processedColumns.add(arabicCol);
-      }
-    }
-  });
-
-  // Add any remaining generated columns that weren't paired (like Price[AED], Image URL)
-  Array.from(generatedColumns).forEach(col => {
-    if (!processedColumns.has(col)) {
-      outputColumns.push(col);
-      processedColumns.add(col);
-    }
-  });
-
+  // Normalize data and add image source
   const normalizedData = transformedData.map(item => {
     const orderedItem: any = {};
-    outputColumns.forEach(key => {
+    Object.keys(item).forEach(key => {
       orderedItem[key] = (item[key] !== undefined && item[key] !== null) ? item[key] : '';
     });
     orderedItem._imageSource = item._imageSource || 'none';
     return orderedItem;
   });
 
+  // Order columns correctly as LAST step: ensures [ar-ae] columns appear immediately after their base columns
+  const orderedData = orderColumnsCorrectly(normalizedData);
+
+  const sortedCurrencies = Array.from(currencies).sort();
+
   return {
-    data: normalizedData,
+    data: orderedData,
     stats: {
       totalRawRows: rawData.length,
       totalItemsProcessed: transformedData.length,
