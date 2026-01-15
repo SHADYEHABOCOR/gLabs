@@ -127,18 +127,68 @@ const calculateSimilarity = (str1: string, str2: string): number => {
 };
 
 /**
- * Find best matching image from database using smart matching
- * Returns { key: string, score: number } or null
+ * Check if a string contains Arabic characters
+ */
+const hasArabicText = (text: string): boolean => {
+  if (!text) return false;
+  return /[\u0600-\u06FF]/.test(text);
+};
+
+/**
+ * Find category match for an item based on keywords
+ * Returns best matching category or null
+ */
+const findCategoryMatch = (
+  item: TransformedMenuItem,
+  db: Record<string, string>
+): { key: string; score: number; matchType: string } | null => {
+  if (!item['Classification'] && !item['Tag']) {
+    return null;
+  }
+
+  const classificationText = ((item['Classification'] || '') + ' ' + (item['Tag'] || '')).toLowerCase();
+
+  // Find which category keywords match the item's classification/tags
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    const matchingKeywords = keywords.filter(kw => classificationText.includes(kw.toLowerCase()));
+
+    if (matchingKeywords.length > 0) {
+      // Find any image from this category in the database
+      const dbKeys = Object.keys(db);
+      for (const dbKey of dbKeys) {
+        const dbName = dbKey.replace(/^img_/, '').replace(/_/g, ' ').toLowerCase();
+
+        // Check if this image belongs to the matching category
+        for (const keyword of matchingKeywords) {
+          if (dbName.includes(keyword.toLowerCase())) {
+            // Score based on how many keywords matched
+            const score = Math.min(0.4 + (matchingKeywords.length * 0.05), 0.4);
+            return { key: dbKey, score, matchType: 'category' };
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Find best matching image from database using smart matching with 6 priority levels
+ * Priority 1: exact-id, 2: exact-name, 3: arabic-name, 4: fuzzy, 5: partial, 6: category
+ * Returns { key: string, score: number, matchType: string } or null
  */
 const findBestMatch = (
   itemName: string,
   itemId: string | undefined,
+  itemArabicName: string | undefined,
+  item: TransformedMenuItem,
   db: Record<string, string>,
   threshold: number = 0.75
 ): { key: string; score: number; matchType: string } | null => {
   const dbKeys = Object.keys(db);
 
-  // 1. Try exact ID match first (highest priority)
+  // Priority 1: Try exact ID match first (highest priority)
   if (itemId) {
     const idKey = getDBKey(itemId.toString());
     if (db[idKey]) {
@@ -146,13 +196,21 @@ const findBestMatch = (
     }
   }
 
-  // 2. Try exact name match
+  // Priority 2: Try exact name match
   const nameKey = getDBKey(itemName);
   if (db[nameKey]) {
     return { key: nameKey, score: 1.0, matchType: 'exact-name' };
   }
 
-  // 3. Try fuzzy matching on all db keys
+  // Priority 3: Try exact Arabic name match (if provided)
+  if (itemArabicName && hasArabicText(itemArabicName)) {
+    const arabicNameKey = getDBKey(itemArabicName);
+    if (db[arabicNameKey]) {
+      return { key: arabicNameKey, score: 1.0, matchType: 'arabic-name' };
+    }
+  }
+
+  // Priority 4: Try fuzzy matching on all db keys
   let bestMatch: { key: string; score: number; matchType: string } | null = null;
   const normalizedItemName = normalizeForMatching(itemName);
 
@@ -166,25 +224,28 @@ const findBestMatch = (
     }
   }
 
-  // 4. Try partial matching (if one name contains the other)
-  if (!bestMatch) {
-    for (const dbKey of dbKeys) {
-      const dbName = normalizeForMatching(dbKey.replace(/^img_/, '').replace(/_/g, ' '));
+  if (bestMatch) return bestMatch;
 
-      if (normalizedItemName.includes(dbName) || dbName.includes(normalizedItemName)) {
-        const score = Math.max(
-          dbName.length / normalizedItemName.length,
-          normalizedItemName.length / dbName.length
-        );
+  // Priority 5: Try partial matching (if one name contains the other)
+  for (const dbKey of dbKeys) {
+    const dbName = normalizeForMatching(dbKey.replace(/^img_/, '').replace(/_/g, ' '));
 
-        if (score >= 0.5 && (!bestMatch || score > bestMatch.score)) {
-          bestMatch = { key: dbKey, score, matchType: 'partial' };
-        }
+    if (normalizedItemName.includes(dbName) || dbName.includes(normalizedItemName)) {
+      const score = Math.max(
+        dbName.length / normalizedItemName.length,
+        normalizedItemName.length / dbName.length
+      );
+
+      if (score >= 0.5 && (!bestMatch || score > bestMatch.score)) {
+        bestMatch = { key: dbKey, score, matchType: 'partial' };
       }
     }
   }
 
-  return bestMatch;
+  if (bestMatch) return bestMatch;
+
+  // Priority 6: Try category-based matching as fallback
+  return findCategoryMatch(item, db);
 };
 
 /**
@@ -313,8 +374,10 @@ export const processImageSync = async (
   matchStats: {
     exactId: number;
     exactName: number;
+    arabicName: number;
     fuzzy: number;
     partial: number;
+    category: number;
   }
 }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -325,8 +388,10 @@ export const processImageSync = async (
   const matchStats = {
     exactId: 0,
     exactName: 0,
+    arabicName: 0,
     fuzzy: 0,
-    partial: 0
+    partial: 0,
+    category: 0
   };
 
   console.log(`🔍 Smart Image Matching: Loaded ${Object.keys(db).length} images from local database`);
@@ -335,6 +400,7 @@ export const processImageSync = async (
     const item = processedData[i];
     const itemName = item['Menu Item Name'] || 'Unknown Item';
     const itemId = item['Menu Item Id'] || '';
+    const itemArabicName = item['Menu Item Name[ar-ae]'];
 
     // Skip if image URL already exists in Excel
     if (item['Image URL'] && typeof item['Image URL'] === 'string' && item['Image URL'].startsWith('http')) {
@@ -342,22 +408,24 @@ export const processImageSync = async (
       continue;
     }
 
-    // Smart matching with fallback strategies
-    const match = findBestMatch(itemName, itemId, db, 0.75);
+    // Smart matching with fallback strategies (6 priority levels)
+    const match = findBestMatch(itemName, itemId, itemArabicName, item, db, 0.75);
 
     if (match) {
       item['Image URL'] = db[match.key];
       item._imageSource = 'database';
       dbCount++;
 
-      // Track match type
+      // Track match type (all 6 priority levels)
       if (match.matchType === 'exact-id') matchStats.exactId++;
       else if (match.matchType === 'exact-name') matchStats.exactName++;
+      else if (match.matchType === 'arabic-name') matchStats.arabicName++;
       else if (match.matchType === 'fuzzy') matchStats.fuzzy++;
       else if (match.matchType === 'partial') matchStats.partial++;
+      else if (match.matchType === 'category') matchStats.category++;
 
-      // Log fuzzy matches for transparency
-      if (match.matchType === 'fuzzy' || match.matchType === 'partial') {
+      // Log lower-priority matches for transparency
+      if (match.matchType === 'fuzzy' || match.matchType === 'partial' || match.matchType === 'arabic-name' || match.matchType === 'category') {
         console.log(`🎯 ${match.matchType} match (${(match.score * 100).toFixed(0)}%): "${itemName}" → "${match.key.replace(/^img_/, '').replace(/_/g, ' ')}"`);
       }
 
@@ -418,12 +486,14 @@ export const processImageSync = async (
     }
   }
 
-  // Log match statistics
+  // Log match statistics (all 6 priority levels)
   console.log(`📊 Image Match Statistics:
     ✓ Exact ID matches: ${matchStats.exactId}
     ✓ Exact name matches: ${matchStats.exactName}
+    🌍 Arabic name matches: ${matchStats.arabicName}
     🎯 Fuzzy matches: ${matchStats.fuzzy}
     🔍 Partial matches: ${matchStats.partial}
+    🏷️  Category matches: ${matchStats.category}
     🎨 Generated: ${generatedCount}
     📁 Total from DB: ${dbCount}`);
 
