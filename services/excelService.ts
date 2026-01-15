@@ -307,7 +307,7 @@ export const transformMenuData = (
   });
 
   return {
-    data: normalizedData,
+    data: orderColumnsCorrectly(normalizedData),
     stats: {
       totalRawRows: rawData.length,
       totalItemsProcessed: transformedData.length,
