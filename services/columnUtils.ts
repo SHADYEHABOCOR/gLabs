@@ -10,6 +10,22 @@ const ARABIC_REGEX = /[\u0600-\u06FF]/;
 const ENGLISH_REGEX = /[A-Za-z]/;
 
 /**
+ * List of column names that should be translated between English and Arabic.
+ * These columns are processed during smart translation to ensure bilingual content.
+ */
+export const TRANSLATABLE_COLUMNS = [
+  'Menu Item Name',
+  'Description',
+  'Brand Name',
+  'Modifier Group Template Name',
+  'Modifier Name',
+  'Tag',
+  'Classification',
+  'Routing Label',
+  'Ingredient'
+] as const;
+
+/**
  * Checks if text contains Arabic characters
  * @param text - The text to check
  * @returns True if text contains Arabic characters, false otherwise
