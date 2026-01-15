@@ -3,6 +3,32 @@
  * Ensures [ar-ae] columns immediately follow their base columns in output
  */
 
+/** Arabic Unicode range regex (covers Arabic script characters) */
+const ARABIC_REGEX = /[\u0600-\u06FF]/;
+
+/** English/Latin alphabet regex */
+const ENGLISH_REGEX = /[A-Za-z]/;
+
+/**
+ * Checks if text contains Arabic characters
+ * @param text - The text to check
+ * @returns True if text contains Arabic characters, false otherwise
+ */
+export function isArabic(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return ARABIC_REGEX.test(text.toString());
+}
+
+/**
+ * Checks if text contains English/Latin characters
+ * @param text - The text to check
+ * @returns True if text contains English characters, false otherwise
+ */
+export function isEnglish(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return ENGLISH_REGEX.test(text.toString());
+}
+
 /**
  * Orders columns so that [ar-ae] columns immediately follow their base columns
  * MUST be called as the LAST step before returning from any data modification function
