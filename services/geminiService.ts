@@ -90,6 +90,34 @@ export const batchTranslate = async <T>(
 };
 
 /**
+ * Parse JSON from Gemini API response, handling markdown code blocks
+ * Gemini may wrap JSON in ```json ... ``` blocks, this function handles that
+ * @param responseText - Raw response text from Gemini API
+ * @returns Parsed JSON object or empty array if parsing fails
+ */
+export const parseGeminiResponse = (responseText: string): any => {
+  try {
+    if (!responseText) return [];
+
+    let jsonText = responseText.trim();
+
+    // Strip markdown code blocks if present
+    // Handle ```json ... ``` or ``` ... ``` patterns
+    const jsonCodeBlockRegex = /^```(?:json)?\s*([\s\S]*?)\s*```$/;
+    const match = jsonText.match(jsonCodeBlockRegex);
+    if (match) {
+      jsonText = match[1].trim();
+    }
+
+    // Parse and return
+    return JSON.parse(jsonText);
+  } catch (error) {
+    console.error('Failed to parse Gemini response:', error);
+    return [];
+  }
+};
+
+/**
  * Analyze a column to determine what translation direction is needed
  * @param columnName - The name of the column to analyze
  * @param data - Array of data items containing the column
@@ -334,7 +362,7 @@ export const translateMissingArabic = async (
         }
       });
 
-      const results = JSON.parse(response.text || '[]');
+      const results = parseGeminiResponse(response.text || '[]');
 
       results.forEach((res: any) => {
         const index = translatedData.findIndex(item => item['Menu Item Id'] === res.id);
@@ -462,7 +490,7 @@ export const translateArabicToEnglish = async (
         }
       });
 
-      const results = JSON.parse(response.text || '[]');
+      const results = parseGeminiResponse(response.text || '[]');
 
       results.forEach((res: any) => {
         // Try to find by Menu Item Id or Modifier Id
@@ -599,8 +627,8 @@ export const estimateCaloriesForItems = async (
         }
       });
 
-      const results = JSON.parse(response.text || '[]');
-      
+      const results = parseGeminiResponse(response.text || '[]');
+
       results.forEach((res: any) => {
         const index = processedData.findIndex(item => item['Menu Item Id'] === res.id);
         if (index !== -1) {
