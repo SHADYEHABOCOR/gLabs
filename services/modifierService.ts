@@ -112,7 +112,6 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
 
   // Track original columns from input data before any processing
   const originalColumns = Object.keys(rawData[0]);
-  console.log('📋 Original columns from input:', originalColumns);
 
   // Track generated columns during transformation using a Set
   const generatedColumns = new Set<string>();
@@ -241,47 +240,29 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
     outputRows.push({ ...currentModifier });
   }
 
-  // Build smart output columns: keep original order, add [ar-ae] immediately after each base column
-  const outputColumns: string[] = [];
-  const processedColumns = new Set<string>();
-
-  // Go through original columns in order, adding [ar-ae] pair right after each column
-  originalColumns.forEach(col => {
-    if (!processedColumns.has(col)) {
-      outputColumns.push(col);
-      processedColumns.add(col);
-
-      // Check if this column has an [ar-ae] counterpart
-      const arabicCol = `${col}[ar-ae]`;
-      if (generatedColumns.has(arabicCol)) {
-        outputColumns.push(arabicCol);
-        processedColumns.add(arabicCol);
-      }
-    }
-  });
-
-  // Add any generated columns that weren't paired (like Price[SAR], Price[AED])
-  Array.from(generatedColumns).forEach(col => {
-    if (!processedColumns.has(col)) {
-      outputColumns.push(col);
-      processedColumns.add(col);
-    }
-  });
-
-  console.log('📊 Final output columns:', outputColumns);
-  console.log('🔧 Generated columns:', Array.from(generatedColumns));
-
-  // Normalize output data to only include output columns
+  // Normalize output data with empty values for missing fields
   const normalizedData = outputRows.map(row => {
-    const orderedRow: ModifierRow = {};
-    outputColumns.forEach(key => {
-      orderedRow[key] = row[key] !== undefined && row[key] !== null ? row[key] : '';
+    const normalizedRow: ModifierRow = {};
+    // Include all original columns plus any generated [ar-ae] columns
+    const allColumns = new Set<string>();
+    originalColumns.forEach(col => allColumns.add(col));
+    generatedColumns.forEach(col => allColumns.add(col));
+    Object.keys(row).forEach(col => allColumns.add(col));
+
+    allColumns.forEach(col => {
+      normalizedRow[col] = row[col] !== undefined && row[col] !== null ? row[col] : '';
     });
-    return orderedRow;
+    return normalizedRow;
   });
+
+  // Call orderColumnsCorrectly as the LAST step to ensure [ar-ae] columns follow their base columns
+  const orderedData = orderColumnsCorrectly(normalizedData);
+
+  // Derive output columns from the ordered data
+  const outputColumns = orderedData.length > 0 ? Object.keys(orderedData[0]) : [];
 
   return {
-    data: normalizedData,
+    data: orderedData,
     outputColumns
   };
 };
