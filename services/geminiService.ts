@@ -545,5 +545,5 @@ export const smartAutoTranslate = async (
 
   // No clear language detected or data is empty
   console.log('🔍 Smart Translation: No translation needed');
-  return { data, count: 0, direction: 'none' };
+  return { data: orderColumnsCorrectly(data), count: 0, direction: 'none' };
 };
