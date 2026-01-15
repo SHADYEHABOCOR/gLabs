@@ -409,7 +409,7 @@ export const translateArabicToEnglish = async (
     await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
   }
 
-  return { data: translatedData, count: totalTranslated };
+  return { data: orderColumnsCorrectly(translatedData), count: totalTranslated };
 };
 
 export const estimateCaloriesForItems = async (
