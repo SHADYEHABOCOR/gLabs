@@ -151,6 +151,58 @@ const convertDriveLinkToDirectUrl = (url: string): string => {
   return url;
 };
 
+/**
+ * Orders columns correctly: ensures [ar-ae] columns appear immediately after their base columns
+ * Handles spacing variations (both "Name[ar-ae]" and "Name [ar-ae]")
+ * @param data Array of data objects with potentially unordered columns
+ * @returns Array of data objects with correctly ordered columns
+ */
+export const orderColumnsCorrectly = (data: any[]): any[] => {
+  if (!data.length) return data;
+
+  // Get all unique columns from data
+  const allColumns = new Set<string>();
+  data.forEach(row => Object.keys(row).forEach(col => allColumns.add(col)));
+
+  // Separate base columns from [ar-ae] columns
+  const baseColumns: string[] = [];
+  const arabicColumns = new Map<string, string>(); // baseCol -> arabicCol
+
+  allColumns.forEach(col => {
+    if (col.includes('[ar-ae]')) {
+      const baseCol = col.replace('[ar-ae]', '').trim();
+      arabicColumns.set(baseCol, col);
+    } else {
+      baseColumns.push(col);
+    }
+  });
+
+  // Build ordered column list: base column followed by its [ar-ae] pair
+  const orderedColumns: string[] = [];
+  baseColumns.forEach(baseCol => {
+    orderedColumns.push(baseCol);
+    const arabicCol = arabicColumns.get(baseCol) ||
+                      arabicColumns.get(baseCol + ' ') ||
+                      Array.from(arabicColumns.values()).find(ac =>
+                        ac.replace('[ar-ae]', '').trim() === baseCol.trim()
+                      );
+    if (arabicCol) {
+      orderedColumns.push(arabicCol);
+    }
+  });
+
+  // Reorder each row
+  return data.map(row => {
+    const orderedRow: Record<string, any> = {};
+    orderedColumns.forEach(col => {
+      if (col in row) {
+        orderedRow[col] = row[col];
+      }
+    });
+    return orderedRow;
+  });
+};
+
 export const transformMenuData = (
   rawData: any[],
   options: TransformOptions
