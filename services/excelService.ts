@@ -1,6 +1,7 @@
 
 import * as XLSX from 'xlsx';
 import { RawMenuItem, TransformedMenuItem, TransformationStats, TransformOptions } from '../types';
+import { orderColumnsCorrectly } from './columnUtils';
 
 const SMALL_WORDS = ['a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'ml', 'l', 'pcs'];
 
