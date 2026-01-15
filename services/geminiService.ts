@@ -245,7 +245,7 @@ export const translateArabicToEnglish = async (
            arabicRegex.test(modName) || arabicRegex.test(modNameAr);
   });
 
-  if (itemsToTranslate.length === 0) return { data, count: 0 };
+  if (itemsToTranslate.length === 0) return { data: orderColumnsCorrectly(data), count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const batchSize = 25;
