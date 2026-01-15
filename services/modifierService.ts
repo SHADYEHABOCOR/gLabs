@@ -1,5 +1,6 @@
 
 import * as XLSX from 'xlsx';
+import { orderColumnsCorrectly } from './excelService';
 
 /**
  * Modifier Group Template Transformation Service
@@ -69,6 +70,27 @@ const isTranslationRow = (row: any): boolean => {
   const hasTranslationPattern = isTranslationValue(groupName) || isTranslationValue(modifierName);
 
   return hasEmptyIds && hasTranslationPattern;
+};
+
+/**
+ * Transform price columns from separate 'Modifier Price' and 'Modifier Price Currency' fields
+ * into combined 'Price[CURRENCY]' format
+ * @param row The modifier row to transform
+ * @returns The row with price columns transformed, and a set of generated column names
+ */
+const transformPriceColumns = (row: any): { transformedRow: any; generatedColumns: Set<string> } => {
+  const transformedRow = { ...row };
+  const generatedColumns = new Set<string>();
+
+  // Check if the row has separate price and currency fields
+  if (row['Modifier Price'] && row['Modifier Price Currency']) {
+    const currency = String(row['Modifier Price Currency']).toUpperCase();
+    const priceColumn = `Price[${currency}]`;
+    transformedRow[priceColumn] = row['Modifier Price'];
+    generatedColumns.add(priceColumn);
+  }
+
+  return { transformedRow, generatedColumns };
 };
 
 /**
