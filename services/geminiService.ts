@@ -45,6 +45,51 @@ export const isEnglish = (text: string): boolean => {
 };
 
 /**
+ * Batch size for translation requests (20 items per batch)
+ */
+export const BATCH_SIZE = 20;
+
+/**
+ * Number of concurrent batch requests to process in parallel
+ */
+export const CONCURRENT_BATCHES = 3;
+
+/**
+ * Reusable batch translation function with controlled concurrency
+ * Splits items into batches of BATCH_SIZE and processes CONCURRENT_BATCHES in parallel
+ * @param items - Array of items to process
+ * @param processBatch - Async function that processes a batch of items
+ * @param onProgress - Optional callback for progress updates
+ */
+export const batchTranslate = async <T>(
+  items: T[],
+  processBatch: (batch: T[], batchIndex: number) => Promise<void>,
+  onProgress?: (current: number, total: number) => void
+): Promise<void> => {
+  if (items.length === 0) return;
+
+  // Create all batches upfront
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    batches.push(items.slice(i, i + BATCH_SIZE));
+  }
+
+  // Process batches with controlled concurrency
+  for (let i = 0; i < batches.length; i += CONCURRENT_BATCHES) {
+    const batchGroup = batches.slice(i, i + CONCURRENT_BATCHES);
+    await Promise.all(
+      batchGroup.map((batch, idx) => processBatch(batch, i + idx))
+    );
+
+    // Update progress after each group of concurrent batches
+    if (onProgress) {
+      const processedCount = Math.min((i + CONCURRENT_BATCHES) * BATCH_SIZE, items.length);
+      onProgress(processedCount, items.length);
+    }
+  }
+};
+
+/**
  * Analyze a column to determine what translation direction is needed
  * @param columnName - The name of the column to analyze
  * @param data - Array of data items containing the column
@@ -212,17 +257,9 @@ export const translateMissingArabic = async (
   if (itemsToTranslate.length === 0) return { data: translatedData, count: alreadyArabicCount };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const batchSize = 25; // Increased from 10 to 25
-  const concurrency = 3; // Process 3 batches in parallel
   let totalTranslated = alreadyArabicCount;
 
-  // Create all batches upfront
-  const batches: typeof itemsToTranslate[] = [];
-  for (let i = 0; i < itemsToTranslate.length; i += batchSize) {
-    batches.push(itemsToTranslate.slice(i, i + batchSize));
-  }
-
-  // Process batches with controlled concurrency
+  // Process batches with controlled concurrency using batchTranslate
   const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
     const translationList = batch.map(item => {
       const name = (item['Menu Item Name'] || '').toString();
@@ -322,19 +359,13 @@ export const translateMissingArabic = async (
         }
       });
 
-      if (onProgress) {
-        onProgress((batchIndex + 1) * batchSize, itemsToTranslate.length);
-      }
     } catch (error) {
       console.error(`Batch ${batchIndex + 1} translation failed:`, error);
     }
   };
 
-  // Process batches with concurrency limit
-  for (let i = 0; i < batches.length; i += concurrency) {
-    const batchGroup = batches.slice(i, i + concurrency);
-    await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
-  }
+  // Process batches with concurrency limit using batchTranslate
+  await batchTranslate(itemsToTranslate, processBatch, onProgress);
 
   return { data: translatedData, count: totalTranslated };
 };
@@ -367,15 +398,8 @@ export const translateArabicToEnglish = async (
   if (itemsToTranslate.length === 0) return { data, count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const batchSize = 25;
-  const concurrency = 3;
   const translatedData = [...data];
   let totalTranslated = 0;
-
-  const batches: typeof itemsToTranslate[] = [];
-  for (let i = 0; i < itemsToTranslate.length; i += batchSize) {
-    batches.push(itemsToTranslate.slice(i, i + batchSize));
-  }
 
   const processBatch = async (batch: typeof itemsToTranslate, batchIndex: number) => {
     const translationList = batch.map(item => {
@@ -515,18 +539,13 @@ export const translateArabicToEnglish = async (
         }
       });
 
-      if (onProgress) {
-        onProgress((batchIndex + 1) * batchSize, itemsToTranslate.length);
-      }
     } catch (error) {
       console.error(`Batch ${batchIndex + 1} Ar to En translation failed:`, error);
     }
   };
 
-  for (let i = 0; i < batches.length; i += concurrency) {
-    const batchGroup = batches.slice(i, i + concurrency);
-    await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
-  }
+  // Process batches with concurrency limit using batchTranslate
+  await batchTranslate(itemsToTranslate, processBatch, onProgress);
 
   return { data: translatedData, count: totalTranslated };
 };
@@ -540,15 +559,8 @@ export const estimateCaloriesForItems = async (
   if (itemsToEstimate.length === 0) return { data, count: 0 };
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const batchSize = 30; // Increased from 10 to 30 (calorie estimation is simpler)
-  const concurrency = 3;
   const processedData = [...data];
   let totalEstimated = 0;
-
-  const batches: typeof itemsToEstimate[] = [];
-  for (let i = 0; i < itemsToEstimate.length; i += batchSize) {
-    batches.push(itemsToEstimate.slice(i, i + batchSize));
-  }
 
   const processBatch = async (batch: typeof itemsToEstimate, batchIndex: number) => {
     const estimateList = batch.map(item => ({
@@ -597,18 +609,13 @@ export const estimateCaloriesForItems = async (
         }
       });
 
-      if (onProgress) {
-        onProgress((batchIndex + 1) * batchSize, itemsToEstimate.length);
-      }
     } catch (error) {
       console.error(`Batch ${batchIndex + 1} calorie estimation failed:`, error);
     }
   };
 
-  for (let i = 0; i < batches.length; i += concurrency) {
-    const batchGroup = batches.slice(i, i + concurrency);
-    await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
-  }
+  // Process batches with concurrency limit using batchTranslate
+  await batchTranslate(itemsToEstimate, processBatch, onProgress);
 
   return { data: processedData, count: totalEstimated };
 };
