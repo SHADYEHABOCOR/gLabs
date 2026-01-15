@@ -88,7 +88,9 @@ export const translateMissingArabic = async (
     return needsNameTranslation || needsDescTranslation || needsBrandTranslation || needsModGroupTranslation || needsModNameTranslation;
   });
 
-  if (itemsToTranslate.length === 0) return { data: translatedData, count: alreadyArabicCount };
+  if (itemsToTranslate.length === 0) {
+    return { data: orderColumnsCorrectly(translatedData), count: alreadyArabicCount };
+  }
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const batchSize = 25; // Increased from 10 to 25
@@ -215,7 +217,7 @@ export const translateMissingArabic = async (
     await Promise.all(batchGroup.map((batch, idx) => processBatch(batch, i + idx)));
   }
 
-  return { data: translatedData, count: totalTranslated };
+  return { data: orderColumnsCorrectly(translatedData), count: totalTranslated };
 };
 
 export const translateArabicToEnglish = async (
