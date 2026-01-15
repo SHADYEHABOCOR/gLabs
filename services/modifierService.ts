@@ -247,8 +247,11 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
     return orderedRow;
   });
 
+  // Apply column ordering to ensure [ar-ae] columns follow their base columns
+  const orderedData = orderColumnsCorrectly(normalizedData);
+
   return {
-    data: normalizedData,
+    data: orderedData,
     outputColumns
   };
 };
