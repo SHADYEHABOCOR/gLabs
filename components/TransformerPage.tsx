@@ -28,7 +28,7 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { RawMenuItem, TransformedMenuItem, TransformationStats, TransformOptions } from '../types';
 import { transformMenuData, downloadExcel, downloadCSV } from '../services/excelService';
-import { getAIInsights, translateMissingArabic, translateArabicToEnglish, estimateCaloriesForItems, smartAutoTranslate } from '../services/geminiService';
+import { getAIInsights, translateMissingArabic, translateArabicToEnglish, estimateCaloriesForItems, smartAutoTranslate, smartTranslate } from '../services/geminiService';
 import { processImageSync, getLocalDB, bulkSaveToDB, removeFromDB, getDBKey, saveToDB, convertToJpg, sanitizeFileName } from '../services/imageService';
 import { upscaleImageUrl } from '../services/scraperService';
 import { transformModifierData, downloadModifierExcel, downloadModifierCSV } from '../services/modifierService';
@@ -295,11 +295,11 @@ const TransformerPage: React.FC = () => {
         // Track translation-generated columns for modifiers
         const modifierTranslationColumns = new Set<string>();
 
-        // Smart auto-translation (auto-detects language and translates accordingly)
+        // Smart column-by-column translation
         if (options.smartTranslate) {
-          setProcessingStatus('Smart Translation: Auto-detecting language...');
+          setProcessingStatus('Smart Translation: Analyzing columns and translating...');
           setProcessingProgress({ current: 0, total: 0 });
-          const res = await smartAutoTranslate(modifierData as any, (current, total) => {
+          const res = await smartTranslate(modifierData as any, (current, total) => {
             setProcessingStatus(`Smart Translating...`);
             setProcessingProgress(prev => ({
               current: Math.max(prev.current, current),
@@ -307,11 +307,7 @@ const TransformerPage: React.FC = () => {
             }));
           });
           modifierData = res.data as any;
-          if (res.direction === 'ar-to-en') {
-            modifierStats.autoTranslatedEnCount = res.count;
-          } else if (res.direction === 'en-to-ar') {
-            modifierStats.autoTranslatedCount = res.count;
-          }
+          modifierStats.autoTranslatedCount = res.count;
           setProcessingProgress({ current: 0, total: 0 });
         }
         // Legacy manual translation toggles (kept for backwards compatibility)
@@ -401,11 +397,11 @@ const TransformerPage: React.FC = () => {
       // Track translation-generated columns
       const translationColumns = new Set<string>();
 
-      // Smart auto-translation (auto-detects language and translates accordingly)
+      // Smart column-by-column translation
       if (options.smartTranslate) {
-        setProcessingStatus('Smart Translation: Auto-detecting language...');
+        setProcessingStatus('Smart Translation: Analyzing columns and translating...');
         setProcessingProgress({ current: 0, total: 0 });
-        const res = await smartAutoTranslate(data, (current, total) => {
+        const res = await smartTranslate(data, (current, total) => {
           setProcessingStatus(`Smart Translating...`);
           setProcessingProgress(prev => ({
             current: Math.max(prev.current, current),
@@ -413,11 +409,7 @@ const TransformerPage: React.FC = () => {
           }));
         });
         data = res.data;
-        if (res.direction === 'ar-to-en') {
-          newStats.autoTranslatedEnCount = res.count;
-        } else if (res.direction === 'en-to-ar') {
-          newStats.autoTranslatedCount = res.count;
-        }
+        newStats.autoTranslatedCount = res.count;
         setProcessingProgress({ current: 0, total: 0 });
       }
       // Legacy manual translation toggles (kept for backwards compatibility)
