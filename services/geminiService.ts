@@ -2,6 +2,48 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TransformationStats, TransformedMenuItem } from "../types";
 
+/**
+ * Whitelist of columns that should be translated to Arabic
+ * Only these columns will be processed by translation functions
+ */
+export const TRANSLATABLE_COLUMNS = [
+  'Menu Item Name',
+  'Description',
+  'Brand Name',
+  'Modifier Group Template Name',
+  'Modifier Name',
+  'Tag',
+  'Classification',
+  'Routing Label',
+  'Ingredient'
+];
+
+/**
+ * Detect if text contains Arabic content (30% threshold)
+ * @param text - Text to analyze
+ * @returns true if text contains > 30% Arabic characters
+ */
+export const isArabic = (text: string): boolean => {
+  if (!text || typeof text !== 'string') return false;
+  const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+  const arabicChars = (text.match(arabicRegex) || []).length;
+  const totalChars = text.replace(/\s/g, '').length;
+  return totalChars > 0 && (arabicChars / totalChars) > 0.3;
+};
+
+/**
+ * Detect if text contains English content (30% threshold)
+ * @param text - Text to analyze
+ * @returns true if text contains > 30% English characters
+ */
+export const isEnglish = (text: string): boolean => {
+  if (!text || typeof text !== 'string') return false;
+  const englishRegex = /[a-zA-Z]/;
+  const englishChars = (text.match(englishRegex) || []).length;
+  const totalChars = text.replace(/\s/g, '').length;
+  return totalChars > 0 && (englishChars / totalChars) > 0.3;
+};
+
 export const getAIInsights = async (stats: TransformationStats, sampleData: any[]) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
