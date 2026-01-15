@@ -49,6 +49,128 @@ export const getDBKey = (str: string) => {
 };
 
 /**
+ * Calculate Levenshtein distance between two strings (for fuzzy matching)
+ */
+const levenshteinDistance = (str1: string, str2: string): number => {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[str2.length][str1.length];
+};
+
+/**
+ * Normalize text for fuzzy matching (remove common variations)
+ */
+const normalizeForMatching = (text: string): string => {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\b(with|and|or|the|a|an)\b/g, '') // Remove common words
+    .trim();
+};
+
+/**
+ * Calculate similarity score between two strings (0-1, where 1 is identical)
+ */
+const calculateSimilarity = (str1: string, str2: string): number => {
+  const normalized1 = normalizeForMatching(str1);
+  const normalized2 = normalizeForMatching(str2);
+
+  if (normalized1 === normalized2) return 1.0;
+  if (!normalized1 || !normalized2) return 0;
+
+  const maxLength = Math.max(normalized1.length, normalized2.length);
+  const distance = levenshteinDistance(normalized1, normalized2);
+  return 1 - (distance / maxLength);
+};
+
+/**
+ * Find best matching image from database using smart matching
+ * Returns { key: string, score: number } or null
+ */
+const findBestMatch = (
+  itemName: string,
+  itemId: string | undefined,
+  db: Record<string, string>,
+  threshold: number = 0.75
+): { key: string; score: number; matchType: string } | null => {
+  const dbKeys = Object.keys(db);
+
+  // 1. Try exact ID match first (highest priority)
+  if (itemId) {
+    const idKey = getDBKey(itemId.toString());
+    if (db[idKey]) {
+      return { key: idKey, score: 1.0, matchType: 'exact-id' };
+    }
+  }
+
+  // 2. Try exact name match
+  const nameKey = getDBKey(itemName);
+  if (db[nameKey]) {
+    return { key: nameKey, score: 1.0, matchType: 'exact-name' };
+  }
+
+  // 3. Try fuzzy matching on all db keys
+  let bestMatch: { key: string; score: number; matchType: string } | null = null;
+  const normalizedItemName = normalizeForMatching(itemName);
+
+  for (const dbKey of dbKeys) {
+    // Extract the actual name from the key (remove 'img_' prefix)
+    const dbName = dbKey.replace(/^img_/, '').replace(/_/g, ' ');
+    const score = calculateSimilarity(itemName, dbName);
+
+    if (score >= threshold && (!bestMatch || score > bestMatch.score)) {
+      bestMatch = { key: dbKey, score, matchType: 'fuzzy' };
+    }
+  }
+
+  // 4. Try partial matching (if one name contains the other)
+  if (!bestMatch) {
+    for (const dbKey of dbKeys) {
+      const dbName = normalizeForMatching(dbKey.replace(/^img_/, '').replace(/_/g, ' '));
+
+      if (normalizedItemName.includes(dbName) || dbName.includes(normalizedItemName)) {
+        const score = Math.max(
+          dbName.length / normalizedItemName.length,
+          normalizedItemName.length / dbName.length
+        );
+
+        if (score >= 0.5 && (!bestMatch || score > bestMatch.score)) {
+          bestMatch = { key: dbKey, score, matchType: 'partial' };
+        }
+      }
+    }
+  }
+
+  return bestMatch;
+};
+
+/**
  * Helper to convert any image source to a high-quality JPG Blob
  */
 export const convertToJpg = async (source: string | Blob): Promise<Blob> => {
@@ -167,47 +289,68 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const processImageSync = async (
   data: TransformedMenuItem[]
-): Promise<{ 
-  data: TransformedMenuItem[], 
-  generatedCount: number, 
-  dbCount: number 
+): Promise<{
+  data: TransformedMenuItem[],
+  generatedCount: number,
+  dbCount: number,
+  matchStats: {
+    exactId: number;
+    exactName: number;
+    fuzzy: number;
+    partial: number;
+  }
 }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const db = await getLocalDB();
   const processedData = [...data];
   let generatedCount = 0;
   let dbCount = 0;
+  const matchStats = {
+    exactId: 0,
+    exactName: 0,
+    fuzzy: 0,
+    partial: 0
+  };
+
+  console.log(`🔍 Smart Image Matching: Loaded ${Object.keys(db).length} images from local database`);
 
   for (let i = 0; i < processedData.length; i++) {
     const item = processedData[i];
     const itemName = item['Menu Item Name'] || 'Unknown Item';
     const itemId = item['Menu Item Id'] || '';
-    
+
+    // Skip if image URL already exists in Excel
     if (item['Image URL'] && typeof item['Image URL'] === 'string' && item['Image URL'].startsWith('http')) {
       item._imageSource = 'excel';
       continue;
     }
 
-    const idKey = itemId ? getDBKey(itemId.toString()) : null;
-    const nameKey = getDBKey(itemName);
+    // Smart matching with fallback strategies
+    const match = findBestMatch(itemName, itemId, db, 0.75);
 
-    if (idKey && db[idKey]) {
-      item['Image URL'] = db[idKey];
+    if (match) {
+      item['Image URL'] = db[match.key];
       item._imageSource = 'database';
       dbCount++;
+
+      // Track match type
+      if (match.matchType === 'exact-id') matchStats.exactId++;
+      else if (match.matchType === 'exact-name') matchStats.exactName++;
+      else if (match.matchType === 'fuzzy') matchStats.fuzzy++;
+      else if (match.matchType === 'partial') matchStats.partial++;
+
+      // Log fuzzy matches for transparency
+      if (match.matchType === 'fuzzy' || match.matchType === 'partial') {
+        console.log(`🎯 ${match.matchType} match (${(match.score * 100).toFixed(0)}%): "${itemName}" → "${match.key.replace(/^img_/, '').replace(/_/g, ' ')}"`);
+      }
+
       continue;
     }
 
-    if (db[nameKey]) {
-      item['Image URL'] = db[nameKey];
-      item._imageSource = 'database';
-      dbCount++;
-      continue;
-    }
-
+    // No match found - generate new image
     try {
       if (generatedCount > 0) {
-        await sleep(1500); 
+        await sleep(1500);
       }
 
       const prompt = `Generate a photo of ${itemName}.
@@ -243,6 +386,7 @@ export const processImageSync = async (
       }
 
       if (base64Image) {
+        const nameKey = getDBKey(itemName);
         await saveToDB(nameKey, base64Image);
         item['Image URL'] = base64Image;
         item._imageSource = 'generated';
@@ -257,5 +401,14 @@ export const processImageSync = async (
     }
   }
 
-  return { data: processedData, generatedCount, dbCount };
+  // Log match statistics
+  console.log(`📊 Image Match Statistics:
+    ✓ Exact ID matches: ${matchStats.exactId}
+    ✓ Exact name matches: ${matchStats.exactName}
+    🎯 Fuzzy matches: ${matchStats.fuzzy}
+    🔍 Partial matches: ${matchStats.partial}
+    🎨 Generated: ${generatedCount}
+    📁 Total from DB: ${dbCount}`);
+
+  return { data: processedData, generatedCount, dbCount, matchStats };
 };
