@@ -64,10 +64,11 @@ const isTranslationRow = (row: any): boolean => {
   const modifierId = row['Modifier Id'];
   const groupName = String(row['Modifier Group Template Name'] || '');
   const modifierName = String(row['Modifier Name'] || '');
+  const description = String(row['Description'] || '');
 
   // If main IDs are empty/missing and names have translation patterns
   const hasEmptyIds = !groupId && !modifierId;
-  const hasTranslationPattern = isTranslationValue(groupName) || isTranslationValue(modifierName);
+  const hasTranslationPattern = isTranslationValue(groupName) || isTranslationValue(modifierName) || isTranslationValue(description);
 
   return hasEmptyIds && hasTranslationPattern;
 };
@@ -141,6 +142,17 @@ export const transformModifierData = (rawData: any[]): ModifierTransformResult =
           generatedColumns.add('Modifier Name[ar-ae]');
         }
       }
+
+      // Handle Description with [ar-ae]: pattern
+      const description = String(row['Description'] || '');
+      if (isTranslationValue(description)) {
+        const parsed = parseTranslation(description);
+        if (parsed && parsed.langCode === 'ar-ae') {
+          currentModifier['Description[ar-ae]'] = parsed.text;
+          generatedColumns.add('Description[ar-ae]');
+        }
+      }
+
       continue;
     }
 
