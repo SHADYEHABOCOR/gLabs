@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { TransformationStats, TransformedMenuItem } from "../types";
+import { orderColumnsCorrectly } from "./excelService";
 
 /**
  * Whitelist of columns that should be translated to Arabic
@@ -646,6 +647,57 @@ export const estimateCaloriesForItems = async (
   await batchTranslate(itemsToEstimate, processBatch, onProgress);
 
   return { data: processedData, count: totalEstimated };
+};
+
+/**
+ * Smart column-by-column translation that analyzes each translatable column
+ * and determines the appropriate translation direction
+ * - Case 1: Base is Arabic → Translate to English, move Arabic to [ar-ae]
+ * - Case 2: Base is English, no Arabic → Translate English to Arabic
+ * - Case 3: Both exist → Ensure ordering only
+ */
+export const smartTranslate = async (
+  data: TransformedMenuItem[],
+  onProgress?: (current: number, total: number) => void
+): Promise<{ data: TransformedMenuItem[], count: number }> => {
+  if (!data || data.length === 0) {
+    return { data, count: 0 };
+  }
+
+  let translatedData = [...data];
+  let totalTranslated = 0;
+
+  // Analyze each translatable column
+  for (const columnName of TRANSLATABLE_COLUMNS) {
+    const analysis = analyzeColumn(columnName, translatedData);
+
+    // Case 1: Base has Arabic (and may have English too)
+    // Translate Arabic to English, move Arabic to [ar-ae]
+    if (analysis.baseHasArabic) {
+      console.log(`📝 SmartTranslate: Column "${columnName}" has Arabic, translating to English...`);
+      const result = await translateArabicToEnglish(translatedData, onProgress);
+      translatedData = result.data;
+      totalTranslated += result.count;
+    }
+    // Case 2: Base has English, no Arabic
+    // Translate English to Arabic
+    else if (analysis.baseHasEnglish && !analysis.arabicColHasData) {
+      console.log(`📝 SmartTranslate: Column "${columnName}" has English, translating to Arabic...`);
+      const result = await translateMissingArabic(translatedData, onProgress);
+      translatedData = result.data;
+      totalTranslated += result.count;
+    }
+    // Case 3: Both exist or Arabic column already has data
+    // Just ensure column ordering (handled in final step)
+    else if (analysis.arabicColExists && analysis.arabicColHasData) {
+      console.log(`📝 SmartTranslate: Column "${columnName}" already has translations, skipping...`);
+    }
+  }
+
+  // Call orderColumnsCorrectly as the final step to ensure [ar-ae] columns follow their base columns
+  const orderedData = orderColumnsCorrectly(translatedData);
+
+  return { data: orderedData, count: totalTranslated };
 };
 
 /**
