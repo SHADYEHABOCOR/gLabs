@@ -44,6 +44,86 @@ export const isEnglish = (text: string): boolean => {
   return totalChars > 0 && (englishChars / totalChars) > 0.3;
 };
 
+/**
+ * Analyze a column to determine what translation direction is needed
+ * @param columnName - The name of the column to analyze
+ * @param data - Array of data items containing the column
+ * @returns Analysis object with language detection results
+ */
+export const analyzeColumn = (columnName: string, data: TransformedMenuItem[]): {
+  baseHasArabic: boolean;
+  baseHasEnglish: boolean;
+  arabicColExists: boolean;
+  arabicColHasData: boolean;
+  itemsNeedingTranslation: number;
+} => {
+  if (!data || data.length === 0) {
+    return {
+      baseHasArabic: false,
+      baseHasEnglish: false,
+      arabicColExists: false,
+      arabicColHasData: false,
+      itemsNeedingTranslation: 0
+    };
+  }
+
+  const arabicColName = `${columnName}[ar-ae]`;
+  let baseHasArabic = false;
+  let baseHasEnglish = false;
+  let arabicColExists = false;
+  let arabicColHasData = false;
+  let itemsNeedingTranslation = 0;
+
+  // Sample first 10 items to detect language patterns
+  const sampleSize = Math.min(10, data.length);
+  for (let i = 0; i < sampleSize; i++) {
+    const item = data[i];
+    const baseValue = (item[columnName] || '').toString().trim();
+    const arabicValue = (item[arabicColName] || '').toString().trim();
+
+    // Check if Arabic column exists in data
+    if (arabicColName in item) {
+      arabicColExists = true;
+    }
+
+    // Check for Arabic content in base column
+    if (baseValue && isArabic(baseValue)) {
+      baseHasArabic = true;
+    }
+
+    // Check for English content in base column
+    if (baseValue && isEnglish(baseValue)) {
+      baseHasEnglish = true;
+    }
+
+    // Check if Arabic column has data
+    if (arabicValue) {
+      arabicColHasData = true;
+    }
+  }
+
+  // Determine items needing translation
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    const baseValue = (item[columnName] || '').toString().trim();
+    const arabicValue = (item[arabicColName] || '').toString().trim();
+
+    // Count items that need translation:
+    // - Base has content but Arabic column is empty
+    if (baseValue && !arabicValue) {
+      itemsNeedingTranslation++;
+    }
+  }
+
+  return {
+    baseHasArabic,
+    baseHasEnglish,
+    arabicColExists,
+    arabicColHasData,
+    itemsNeedingTranslation
+  };
+};
+
 export const getAIInsights = async (stats: TransformationStats, sampleData: any[]) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
