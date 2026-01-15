@@ -7,6 +7,23 @@ const STORE_NAME = 'images';
 const DB_VERSION = 1;
 
 /**
+ * Category keywords for fallback image matching
+ * Used when no direct name match is found, matches items by category keywords
+ */
+export const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  burger: ['burger', 'beef', 'chicken burger', 'patty', 'ground meat', 'bun'],
+  pizza: ['pizza', 'pie', 'italian', 'cheese', 'pepperoni', 'margherita'],
+  cake: ['cake', 'pastry', 'bakery', 'dessert cake', 'layer', 'frosting'],
+  coffee: ['coffee', 'espresso', 'latte', 'cappuccino', 'mocha', 'americano', 'beverage coffee'],
+  sandwich: ['sandwich', 'sub', 'wrap', 'roll', 'panini', 'club'],
+  salad: ['salad', 'greens', 'vegetables', 'lettuce', 'dressing'],
+  chicken: ['chicken', 'poultry', 'fried chicken', 'grilled chicken', 'wings'],
+  dessert: ['dessert', 'sweet', 'chocolate', 'brownie', 'pudding', 'mousse'],
+  beverage: ['drink', 'juice', 'smoothie', 'tea', 'soda', 'water', 'beverage'],
+  pasta: ['pasta', 'noodle', 'spaghetti', 'fettuccine', 'rigatoni', 'italian']
+};
+
+/**
  * IndexedDB Wrapper for robust image storage
  */
 const getDB = (): Promise<IDBDatabase> => {
